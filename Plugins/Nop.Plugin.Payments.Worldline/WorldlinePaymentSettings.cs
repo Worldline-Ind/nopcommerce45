@@ -10,7 +10,7 @@ namespace Nop.Plugin.Payments.Worldline
        /// <summary>
       /// Gets or sets a utf8 
       /// </summary>
-        public string utf8 { get; set; }
+        public string Utf8 { get; set; }
         /// <summary>
         /// Gets or sets a authenticity token
         /// </summary>

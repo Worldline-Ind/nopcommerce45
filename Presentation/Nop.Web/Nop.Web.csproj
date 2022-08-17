@@ -61,7 +61,31 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Plugins\" />
+    <None Include="Plugins\Payments.Worldline\runtimes\linux-arm64\native\libSkiaSharp.so" />
+    <None Include="Plugins\Payments.Worldline\runtimes\linux-arm\native\libSkiaSharp.so" />
+    <None Include="Plugins\Payments.Worldline\runtimes\linux-musl-x64\native\libSkiaSharp.so" />
+    <None Include="Plugins\Payments.Worldline\runtimes\linux-x64\native\libSkiaSharp.so" />
+    <None Include="Plugins\Payments.Worldline\runtimes\osx\native\libSkiaSharp.dylib" />
+    <None Include="Plugins\Payments.Worldline\runtimes\unix\lib\netcoreapp3.0\System.Drawing.Common.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\unix\lib\netcoreapp3.1\Microsoft.Data.SqlClient.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-arm64\native\libSkiaSharp.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-arm64\native\Microsoft.Data.SqlClient.SNI.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-arm\native\Microsoft.Data.SqlClient.SNI.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-x64\native\libSkiaSharp.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-x86\native\libSkiaSharp.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win-x86\native\Microsoft.Data.SqlClient.SNI.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netcoreapp2.0\System.Diagnostics.PerformanceCounter.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netcoreapp3.0\Microsoft.Win32.SystemEvents.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netcoreapp3.0\System.Drawing.Common.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netcoreapp3.0\System.Windows.Extensions.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netcoreapp3.1\Microsoft.Data.SqlClient.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netstandard2.0\System.Runtime.Caching.dll" />
+    <None Include="Plugins\Payments.Worldline\runtimes\win\lib\netstandard2.0\System.Security.Cryptography.ProtectedData.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Plugins\Payments.Worldline\Views\" />
   </ItemGroup>
 
   <!-- This target execute after "Build" target.

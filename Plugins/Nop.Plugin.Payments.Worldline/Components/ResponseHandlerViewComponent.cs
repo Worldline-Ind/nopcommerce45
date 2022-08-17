@@ -26,14 +26,14 @@ namespace Nop.Plugin.Payments.Worldline.Components
     [ViewComponent(Name = "ResponseHandler")]
     public class ResponseHandlerViewComponent : NopViewComponent
     {
-        private IHostingEnvironment _env;
+        private IWebHostEnvironment _env;
         //  private readonly IShoppingCartModelFactory = Nop.Web.Factories.IProductModelFactory;
         private readonly IShoppingCartModelFactory _shoppingCartModelFactory;
         private readonly IShoppingCartService _shoppingCartService;
         private readonly IStoreContext _storeContext;
         private readonly IWorkContext _workContext;
 
-        public ResponseHandlerViewComponent(IHostingEnvironment env, IShoppingCartModelFactory shoppingCartModelFactory, IShoppingCartService shoppingCartService,
+        public ResponseHandlerViewComponent(IWebHostEnvironment env, IShoppingCartModelFactory shoppingCartModelFactory, IShoppingCartService shoppingCartService,
             IStoreContext storeContext,
             IWorkContext workContext)
         {
@@ -44,8 +44,7 @@ namespace Nop.Plugin.Payments.Worldline.Components
             _workContext = workContext;
         }
         public async Task<IViewComponentResult> InvokeAsync(IFormCollection formCollection)
-        {
-       
+        {       
             try
             {
                 foreach (var key in formCollection.Keys)
@@ -54,16 +53,12 @@ namespace Nop.Plugin.Payments.Worldline.Components
                 }
 
                 string path = _env.WebRootPath;
-
                 string json = "";
 
-
-                using (StreamReader r = new StreamReader(path + "\\output.json"))
+                using (StreamReader reader = new StreamReader(path + "\\output.json"))
                 {
-                    json = r.ReadToEnd();
-
-                    r.Close();
-
+                    json = reader.ReadToEnd();
+                    reader.Close();
                 }
                 JObject config_data = JObject.Parse(json);
                 var data = formCollection["msg"].ToString().Split('|');
@@ -81,7 +76,6 @@ namespace Nop.Plugin.Payments.Worldline.Components
                 if (data[0] == "0300")
                 {
                     ViewBag.abrt = false;
-
                     var strJ = new
                     {
                         merchant = new
@@ -117,14 +111,11 @@ namespace Nop.Plugin.Payments.Worldline.Components
                     ViewBag.jsonData = jsonData;
                     ViewBag.tokens = tokens;
                     ViewBag.paramsData = formCollection["msg"];
-
                     // return response;
                 }
-
             }
             catch (Exception ex)
             {
-
                 //throw;
             }
 
@@ -132,8 +123,6 @@ namespace Nop.Plugin.Payments.Worldline.Components
             //   return Content("Success");
             //return View("~/Plugins/Payments.Worldline/Views/PaymentInfo.cshtml");
             //  return Redirect(_storeContext.CurrentStore.Url+ "checkout/OpcSavePaymentInfo");
-        
-          
         }
         public string GenerateRandomString(int size)
         {

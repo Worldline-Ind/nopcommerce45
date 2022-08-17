@@ -138,7 +138,7 @@ namespace Nop.Plugin.Payments.Worldline.Models
         public string ShowPGResponseMsg { get; set; }
         public bool ShowPGResponseMsg_OverrideForStore { get; set; }
 
-        [NopResourceDisplayName("Plugins.Payments.Worldline.Fields.frequency")]
+        [NopResourceDisplayName("Plugins.Payments.Worldline.Fields.enableAbortResponse")]
         public string EnableAbortResponse { get; set; }
         public bool EnableAbortResponse_OverrideForStore { get; set; }
 

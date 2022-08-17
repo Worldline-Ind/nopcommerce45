@@ -108,8 +108,7 @@ namespace Nop.Plugin.Payments.Worldline.Components
             ViewBag.siDetailsAtMerchantEnd = Convert.ToBoolean(_settingService.GetSettingAsync("worldlinepaymentsettings.siDetailsAtMerchantEnd").Result.Value.ToString().ToLower());
             ViewBag.enableSI = Convert.ToBoolean(_settingService.GetSettingAsync("worldlinepaymentsettings.enableSI").Result.Value.ToString().ToLower());
             ViewBag.embedPaymentGatewayOnPage = Convert.ToBoolean(_settingService.GetSettingAsync("worldlinepaymentsettings.embedPaymentGatewayOnPage").Result.Value.ToString().ToLower());
-            ViewBag.seperateCardMode = Convert.ToBoolean(_settingService.GetSettingAsync("worldlinepaymentsettings.SeperateCardMode").Result.Value.ToString().ToLower());
-
+            ViewBag.separateCardMode = Convert.ToBoolean(_settingService.GetSettingAsync("worldlinepaymentsettings.separateCardMode").Result.Value.ToString().ToLower());
 
             if (_settingService.GetSettingAsync("worldlinepaymentsettings.merchantSchemeCode").Result.Value.ToString().ToLower() == "test")
             {

@@ -55,7 +55,7 @@ namespace Nop.Plugin.Payments.Worldline
         private readonly IWebHelper _webHelper;
         private readonly WorldlineStandardHttpClient _WorldlineHttpClient;
         private readonly WorldlinePaymentSettings _WorldlinePaymentSettings;
-        private readonly IPermissionService _permissionService;
+        private readonly IPermissionService _PermissionService;
 
         #endregion
 
@@ -77,8 +77,8 @@ namespace Nop.Plugin.Payments.Worldline
             IStateProvinceService stateProvinceService,
             ITaxService taxService,
             IWebHelper webHelper,
-            WorldlineStandardHttpClient WorldlineHttpClient,
-            WorldlinePaymentSettings WorldlinePaymentSettings)
+            WorldlineStandardHttpClient worldlineHttpClient,
+            WorldlinePaymentSettings worldlinePaymentSettings)
         {
             _currencySettings = currencySettings;
             _addressService = addressService;
@@ -96,8 +96,8 @@ namespace Nop.Plugin.Payments.Worldline
             _stateProvinceService = stateProvinceService;
             _taxService = taxService;
             _webHelper = webHelper;
-            _WorldlineHttpClient = WorldlineHttpClient;
-            _WorldlinePaymentSettings = WorldlinePaymentSettings;
+            _WorldlineHttpClient = worldlineHttpClient;
+            _WorldlinePaymentSettings = worldlinePaymentSettings;
         }
 
         #endregion

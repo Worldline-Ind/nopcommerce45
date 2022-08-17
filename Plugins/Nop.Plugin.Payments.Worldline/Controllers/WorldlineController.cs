@@ -5,15 +5,25 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Routing;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Nop.Core;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Payments;
+using Nop.Core.Domain.Shipping;
+using Nop.Core.Domain.Tax;
+using Nop.Data;
 using Nop.Plugin.Payments.Worldline.Models;
+//using Nop.Core.Data;
+using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Localization;
@@ -22,21 +32,13 @@ using Nop.Services.Messages;
 using Nop.Services.Orders;
 using Nop.Services.Payments;
 using Nop.Services.Security;
+using Nop.Web.Areas.Admin.Models.Orders;
 using Nop.Web.Factories;
-using Nop.Web.Models.ShoppingCart;
 using Nop.Web.Framework;
 using Nop.Web.Framework.Controllers;
-using Nop.Web.Framework.Mvc.Filters;
-//using Nop.Core.Data;
-using Nop.Services.Catalog;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Newtonsoft.Json;
-using System.Security.Cryptography;
-using Microsoft.AspNetCore.Routing;
 using Nop.Web.Framework.Menu;
-using Nop.Web.Areas.Admin.Models.Orders;
-using Nop.Data;
-using System.Threading.Tasks;
+using Nop.Web.Framework.Mvc.Filters;
+using Nop.Web.Models.ShoppingCart;
 
 namespace Nop.Plugin.Payments.Worldline.Controllers
 {
@@ -63,11 +65,15 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         private readonly IRepository<Order> _orderRepository;
         private readonly IProductService _productService;
         private readonly ICustomerActivityService _customerActivityService;
+
+        private const string SUCCESS_CODE = "0300";
+        private const string FAILURE_CODE = "0399";
+        private const string ABORTED_CODE = "0396";
         #endregion
 
         #region Ctor
 
-        public WorldlineController(IGenericAttributeService genericAttributeService, 
+        public WorldlineController(IGenericAttributeService genericAttributeService,
             IShoppingCartModelFactory shoppingCartModelFactory,
             IOrderProcessingService orderProcessingService,
             IOrderService orderService,
@@ -297,6 +303,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 var currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
                 //   JObject config_data = JObject.Parse(json);
                 var data = formCollection["msg"].ToString().Split('|');
+                string notification = string.Empty;
                 if (data == null)
                 {//|| data[1].ToString()== "User Aborted"
                     ViewBag.abrt = true;
@@ -308,7 +315,55 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     return Redirect(referer);
                 }
                 ViewBag.online_transaction_msg = data;
-                if (data[0] == "0300")
+
+                var cart = await _shoppingCartService.GetShoppingCartAsync(await _workContext.GetCurrentCustomerAsync(), ShoppingCartType.ShoppingCart, _storeContext.GetCurrentStoreAsync().Result.Id);
+                OrderTotalsModel modelTtl = await _shoppingCartModelFactory.PrepareOrderTotalsModelAsync(cart, false);
+                var model = new ShoppingCartModel();
+                model = await _shoppingCartModelFactory.PrepareShoppingCartModelAsync(new ShoppingCartModel(), cart,
+                    isEditable: false, prepareAndDisplayOrderReviewData: true);
+                //  var model1 = _shoppingCartModelFactory.pre(cart, false);
+
+                Order order = new Order();
+                order.CustomerId = _workContext.GetCurrentCustomerAsync().Result.Id;
+                order.AuthorizationTransactionId = data[3];
+                order.AuthorizationTransactionCode = data[5];
+                order.CaptureTransactionResult = formCollection["msg"].ToString();
+                order.StoreId = _storeContext.GetCurrentStoreAsync().Result.Id;
+                order.BillingAddressId = (int)(_workContext.GetCurrentCustomerAsync().Result.BillingAddressId);
+                order.PickupInStore = model.OrderReviewData.SelectedPickupInStore;
+                order.ShippingStatusId = (int)ShippingStatus.NotYetShipped;
+                order.PaymentMethodSystemName = "Payments.Worldline";
+                order.CustomerCurrencyCode = currency.Result.Value;
+                order.CurrencyRate = _workContext.GetWorkingCurrencyAsync().Result.Rate;
+                order.CustomerTaxDisplayTypeId = (int)TaxDisplayType.ExcludingTax;
+                order.OrderSubtotalInclTax = String.IsNullOrEmpty(modelTtl.SubTotal) ? 0.00m : Convert.ToDecimal(modelTtl.SubTotal.Substring(1)) + Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.Tax) ? 0.00m : modelTtl.Tax.Substring(1));
+                order.OrderSubtotalExclTax = String.IsNullOrEmpty(modelTtl.SubTotal) ? 0.00m : Convert.ToDecimal(modelTtl.SubTotal.Substring(1));
+                order.OrderSubTotalDiscountInclTax = 0.00m;
+                order.OrderSubTotalDiscountExclTax = 0.00m;
+                order.OrderShippingInclTax = Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.Shipping) ? 0.00m : modelTtl.Shipping.Substring(1));
+                order.OrderShippingExclTax = 0.00m;
+                order.PaymentMethodAdditionalFeeInclTax = 0.00m;
+                order.PaymentMethodAdditionalFeeExclTax = 0.00m;
+                order.TaxRates = modelTtl.TaxRates.ToString();
+                order.OrderTax = 0.00m;
+                order.OrderDiscount = 0.00m;
+                order.OrderTotal = Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.OrderTotal) ? 0.00m : modelTtl.OrderTotal.Substring(1));
+                order.RefundedAmount = 0.00m;
+                order.CustomerLanguageId = _storeContext.GetCurrentStoreAsync().Result.DefaultLanguageId;
+                order.AffiliateId = _workContext.GetCurrentCustomerAsync().Result.AffiliateId;
+                order.AllowStoringCreditCardNumber = false;
+
+                order.Deleted = false;
+                order.ShippingAddressId = model.OrderReviewData.ShippingAddress.Id;
+                order.CreatedOnUtc = DateTime.UtcNow;
+                //order.CustomOrderNumber
+                order.OrderGuid = Guid.NewGuid();
+
+                var last = _orderRepository.Table.OrderByDescending(p => p.Id).First();
+                int custOrdnum = last.Id + 1;
+                order.CustomOrderNumber = custOrdnum.ToString();
+
+                if (data[0] == SUCCESS_CODE)
                 {
                     ViewBag.abrt = false;
                     var strJ = new
@@ -327,135 +382,104 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                         }
                     };
                     HttpContent content = new StringContent(JsonConvert.SerializeObject(strJ));
-                    HttpClient client = new HttpClient();
-                    client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
+                    HttpClient client = new HttpClient
+                    {
+                        BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req")
+                    };
                     client.DefaultRequestHeaders.Accept.Clear();
                     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                    HttpResponseMessage response = client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content).Result;
+
+                    HttpResponseMessage response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
                     var a = response.Content.ReadAsStringAsync();
 
                     JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(a));
-                    var jsonData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
+                    var dualVerificationData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
+                    List<JToken> dualVerificationTokens = dualVerificationData.Children().ToList();
 
-                    List<JToken> tokens = jsonData.Children().ToList();
+                    var paymentData = JObject.Parse(dualVerificationTokens[6].ToString()).Children();
+                    List<JToken> paymentTokens = paymentData.Children().ToList();
 
-                    var jsonData1 = JObject.Parse(tokens[6].ToString()).Children();
-                    List<JToken> tokens1 = jsonData.Children().ToList();
-                    var cart = await _shoppingCartService.GetShoppingCartAsync(await _workContext.GetCurrentCustomerAsync(), ShoppingCartType.ShoppingCart, _storeContext.GetCurrentStoreAsync().Result.Id);
-                    OrderTotalsModel modelTtl = await _shoppingCartModelFactory.PrepareOrderTotalsModelAsync(cart, false);
-                    var model = new ShoppingCartModel();
-                    model = await _shoppingCartModelFactory.PrepareShoppingCartModelAsync(new ShoppingCartModel(), cart,
-                        isEditable: false, prepareAndDisplayOrderReviewData: true);
-                    //  var model1 = _shoppingCartModelFactory.pre(cart, false);
-
-                    Order order = new Order();
-                    order.CustomerId = _workContext.GetCurrentCustomerAsync().Result.Id;
-                    order.AuthorizationTransactionId = data[5];
-                    order.AuthorizationTransactionCode = data[3];
-                    order.AuthorizationTransactionResult = tokens[6]["paymentTransaction"]["statusMessage"].ToString();
-                    order.CaptureTransactionResult = formCollection["msg"].ToString();                    
-                    order.PaymentStatusId = (tokens[6]["paymentTransaction"]["statusMessage"].ToString() == "SUCCESS") ? 30 : 10;                    
-                    order.StoreId = _storeContext.GetCurrentStoreAsync().Result.Id;
-                    order.BillingAddressId = (int)(_workContext.GetCurrentCustomerAsync().Result.BillingAddressId);
-                    order.PickupInStore = model.OrderReviewData.SelectedPickupInStore;
-                    order.OrderStatusId = 10;
-                    order.ShippingStatusId = 20;
-                    order.PaymentMethodSystemName = "Payments.Worldline";
-                    order.CustomerCurrencyCode = "INR";
-                    order.CurrencyRate = _workContext.GetWorkingCurrencyAsync().Result.Rate;
-                    order.CustomerTaxDisplayTypeId = 10;
-                    order.OrderSubtotalInclTax = String.IsNullOrEmpty(modelTtl.SubTotal) ? 0.00m : Convert.ToDecimal(modelTtl.SubTotal.Substring(1)) + Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.Tax) ? 0.00m : modelTtl.Tax.Substring(1));
-                    order.OrderSubtotalExclTax = String.IsNullOrEmpty(modelTtl.SubTotal) ? 0.00m : Convert.ToDecimal(modelTtl.SubTotal.Substring(1));
-                    order.OrderSubTotalDiscountInclTax = 0.00m;
-                    order.OrderSubTotalDiscountExclTax = 0.00m;
-                    order.OrderShippingInclTax = Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.Shipping) ? 0.00m : modelTtl.Shipping.Substring(1));
-                    order.OrderShippingExclTax = 0.00m;
-                    order.PaymentMethodAdditionalFeeInclTax = 0.00m;
-                    order.PaymentMethodAdditionalFeeExclTax = 0.00m;
-                    order.TaxRates = modelTtl.TaxRates.ToString();
-                    order.OrderTax = 0.00m;
-                    order.OrderDiscount = 0.00m;
-                    order.OrderTotal = Convert.ToDecimal(String.IsNullOrEmpty(modelTtl.OrderTotal) ? 0.00m : modelTtl.OrderTotal.Substring(1));
-                    order.RefundedAmount = 0.00m;
-                    order.CustomerLanguageId = _storeContext.GetCurrentStoreAsync().Result.DefaultLanguageId;
-                    order.AffiliateId = _workContext.GetCurrentCustomerAsync().Result.AffiliateId;
-                    order.AllowStoringCreditCardNumber = false;
-
-                    order.Deleted = false;
-                    order.ShippingAddressId = model.OrderReviewData.ShippingAddress.Id;
-                    order.CreatedOnUtc = DateTime.UtcNow;
-                    //order.CustomOrderNumber
-                    order.OrderGuid = Guid.NewGuid();
-
-                    var last = _orderRepository.Table.OrderByDescending(p => p.Id).First();
-                    int custOrdnum = last.Id + 1;
-                    order.CustomOrderNumber = custOrdnum.ToString();
-                    await _orderService.InsertOrderAsync(order);
-                    if (_workContext.GetCurrentCustomerAsync().Result.HasShoppingCartItems)
+                    order.AuthorizationTransactionResult = paymentTokens[7]["statusMessage"].ToString();
+                    order.PaymentStatusId = (paymentTokens[7]["statusCode"].ToString() == SUCCESS_CODE) ? (int)PaymentStatus.Paid : (int)PaymentStatus.Pending;
+                    order.OrderStatusId = (paymentTokens[7]["statusCode"].ToString() == SUCCESS_CODE) ? (int)OrderStatus.Processing : (int)OrderStatus.Pending;
+                    notification = "Order Placed successfully!";
+                }
+                else if (data[0] == FAILURE_CODE || data[0] == ABORTED_CODE)
+                {
+                    order.AuthorizationTransactionResult = data[1];
+                    order.PaymentStatusId = (int)PaymentStatus.Pending;
+                    order.OrderStatusId = (int)OrderStatus.Cancelled;
+                    notification = data[1].ToUpperInvariant() + ":" + data[2];
+                }
+                else
+                {
+                    order.AuthorizationTransactionResult = data[1];
+                    order.PaymentStatusId = (int)PaymentStatus.Pending;
+                    order.OrderStatusId = (int)OrderStatus.Pending;
+                    notification = data[1].ToUpperInvariant() + ":" + data[2];
+                }
+                await _orderService.InsertOrderAsync(order);
+                if (_workContext.GetCurrentCustomerAsync().Result.HasShoppingCartItems)
+                {
+                    var shoppingCartItems = await _shoppingCartService.GetShoppingCartAsync(await _workContext.GetCurrentCustomerAsync(), ShoppingCartType.ShoppingCart);
+                    //.Sum(item => item.Quantity);
+                    foreach (var item in shoppingCartItems)
                     {
-                        var shoppingCartItems = await _shoppingCartService.GetShoppingCartAsync(await _workContext.GetCurrentCustomerAsync(), ShoppingCartType.ShoppingCart);
-                        //.Sum(item => item.Quantity);
-                        foreach (var item in shoppingCartItems)
+                        //_shoppingCartService.DeleteShoppingCartItem(item.Id);
+                        var product = _productService.GetProductByIdAsync(item.ProductId);
+                        OrderItem newOrderItem = new OrderItem
                         {
-                            //_shoppingCartService.DeleteShoppingCartItem(item.Id);
-                            var product = _productService.GetProductByIdAsync(item.ProductId);
-                            OrderItem newOrderItem = new OrderItem
-                            {
-                                OrderItemGuid = Guid.NewGuid(),
-                                OrderId = order.Id,
-                                ProductId = item.ProductId,
-                                UnitPriceInclTax = product.Result.Price,
-                                UnitPriceExclTax = product.Result.Price,
-                                PriceInclTax = product.Result.Price * item.Quantity,
-                                PriceExclTax = product.Result.Price * item.Quantity,
-                                OriginalProductCost = product.Result.ProductCost,
-                                AttributeDescription = "",
-                                AttributesXml = item.AttributesXml,
-                                Quantity = item.Quantity,
-                                DiscountAmountInclTax = Convert.ToDecimal(0.00),
-                                DiscountAmountExclTax = Convert.ToDecimal(0.00),
-                                DownloadCount = 0,
-                                IsDownloadActivated = product.Result.IsDownload,
-                                LicenseDownloadId = product.Result.DownloadId,
-                                ItemWeight = product.Result.Weight,
-                                RentalStartDateUtc = item.RentalStartDateUtc,
-                                RentalEndDateUtc = item.RentalEndDateUtc
-                            };
-                            //order.OrderItems.Add(newOrderItem);
-                            await _orderService.InsertOrderItemAsync(newOrderItem);
-                        }
-                        
-                        List<int> ids = new List<int>();
-
-
-                        foreach (var item in shoppingCartItems)
-                        {
-                            ids.Add(item.Id);
-                            //  _shoppingCartService.DeleteShoppingCartItem(item.Id);
-                        }
-                        foreach (var item in ids)
-                        {
-                            await _shoppingCartService.DeleteShoppingCartItemAsync(item);
-
-                        }
-                        _notificationService.SuccessNotification("Order Placed successfully!");
-
+                            OrderItemGuid = Guid.NewGuid(),
+                            OrderId = order.Id,
+                            ProductId = item.ProductId,
+                            UnitPriceInclTax = product.Result.Price,
+                            UnitPriceExclTax = product.Result.Price,
+                            PriceInclTax = product.Result.Price * item.Quantity,
+                            PriceExclTax = product.Result.Price * item.Quantity,
+                            OriginalProductCost = product.Result.ProductCost,
+                            AttributeDescription = string.Empty,
+                            AttributesXml = item.AttributesXml,
+                            Quantity = item.Quantity,
+                            DiscountAmountInclTax = Convert.ToDecimal(0.00),
+                            DiscountAmountExclTax = Convert.ToDecimal(0.00),
+                            DownloadCount = 0,
+                            IsDownloadActivated = product.Result.IsDownload,
+                            LicenseDownloadId = product.Result.DownloadId,
+                            ItemWeight = product.Result.Weight,
+                            RentalStartDateUtc = item.RentalStartDateUtc,
+                            RentalEndDateUtc = item.RentalEndDateUtc
+                        };
+                        //order.OrderItems.Add(newOrderItem);
+                        await _orderService.InsertOrderItemAsync(newOrderItem);
                     }
 
-                    //int itemCnt = _workContext.CurrentCustomer.ShoppingCartItems.Count;
-                    //for (int i = 0; i < itemCnt; i++)
-                    //{
-
-                    //}
-
-                    //ViewBag.dual_verification_result = dual_verification_result;
-                    //ViewBag.a = a;
-                    //ViewBag.jsonData = jsonData;
-                    //ViewBag.tokens = tokens;
-                    //ViewBag.paramsData = formCollection["msg"];
-
-                    // return response;
+                    List<int> ids = new List<int>();
+                    foreach (var item in shoppingCartItems)
+                    {
+                        ids.Add(item.Id);
+                        //  _shoppingCartService.DeleteShoppingCartItem(item.Id);
+                    }
+                    foreach (var item in ids)
+                    {
+                        await _shoppingCartService.DeleteShoppingCartItemAsync(item);
+                    }
+                    _notificationService.SuccessNotification(notification);
                 }
+
+                //int itemCnt = _workContext.CurrentCustomer.ShoppingCartItems.Count;
+                //for (int i = 0; i < itemCnt; i++)
+                //{
+
+                //}
+
+                //ViewBag.dual_verification_result = dual_verification_result;
+                //ViewBag.a = a;
+                //ViewBag.jsonData = jsonData;
+                //ViewBag.tokens = tokens;
+                //ViewBag.paramsData = formCollection["msg"];
+
+                // return response;
+
 
             }
             catch (Exception ex)
@@ -485,7 +509,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
 
             var model = new ConfigurationModel
             {
-                Utf8 = worldlinePaymentSettings.utf8,
+                Utf8 = worldlinePaymentSettings.Utf8,
                 Authenticity_token = worldlinePaymentSettings.authenticity_token,
                 MerchantCode = worldlinePaymentSettings.merchantCode,
                 MerchantSchemeCode = worldlinePaymentSettings.merchantSchemeCode,
@@ -603,7 +627,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
 
                 return View("~/Plugins/Payments.Worldline/Views/Configure.cshtml", model);
 
-            model.Utf8_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.utf8, storeScope);
+            model.Utf8_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.Utf8, storeScope);
             model.Authenticity_token_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.authenticity_token, storeScope);
 
             model.MerchantCode_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantCode, storeScope);
@@ -713,7 +737,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             worldlinePaymentSettings.showAllModesWithSI = model.ShowAllModesWithSI;
             worldlinePaymentSettings.siDetailsAtMerchantEnd = model.SiDetailsAtMerchantEnd;
             worldlinePaymentSettings.amounttype = model.AmountType;
-            worldlinePaymentSettings.utf8 = model.Utf8;
+            worldlinePaymentSettings.Utf8 = model.Utf8;
             worldlinePaymentSettings.authenticity_token = model.Authenticity_token;
             worldlinePaymentSettings.frequency = model.Frequency;
 
@@ -769,7 +793,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.showAllModesWithSI, model.ShowAllModesWithSI_OverrideForStore, storeScope, false);
             await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.siDetailsAtMerchantEnd, model.SiDetailsAtMerchantEnd_OverrideForStore, storeScope, false);
             await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.amounttype, model.AmountType_OverrideForStore, storeScope, false);
-            await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.utf8, model.Utf8_OverrideForStore, storeScope, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.Utf8, model.Utf8_OverrideForStore, storeScope, false);
             await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.authenticity_token, model.Authenticity_token_OverrideForStore, storeScope, false);
             await _settingService.SaveSettingOverridablePerStoreAsync(worldlinePaymentSettings, x => x.frequency, model.Frequency_OverrideForStore, storeScope, false);
 
@@ -952,22 +976,23 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         [Area(AreaNames.Admin)]
         public ActionResult Reconcile()
         {
-            return View("~/Plugins/Payments.Worldline/Views/Reconcile.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/Reconcile.cshtml");
         }
 
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
         [HttpPost]
-        public async Task<ActionResult> Reconcile(IFormCollection fc)
+        public async Task<ActionResult> ReconcileAsync(IFormCollection fc)
         {
             try
             {
                 string path = _env.WebRootPath;
-                string json = "";
-                var merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode").Result.Value.ToString();
-                var currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency").Result.Value.ToString();
-                ViewBag.merchantcode = merchantcode;
-                ViewBag.currency = currency;
+                string json = string.Empty;
+                List<int> lstUpdatedOrders = new List<int>();
+                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+                ViewBag.merchantcode = merchantcode.Value;
+                ViewBag.currency = currency.Value;
                 //using (StreamReader r = new StreamReader(path + "\\output.json"))
                 //{
                 //    json = r.ReadToEnd();
@@ -990,17 +1015,17 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 foreach (Order order in lstOrder)
                 {
                     int cntK = 0;
-                    var authorizationTransactionCode = order.AuthorizationTransactionCode;
+                    var authorizationTransactionCode = order.AuthorizationTransactionId;
                     var day = order.CreatedOnUtc;
                     //for (var day = start_date; day <= end_date; day = day.AddDays(1))
                     //{
                     var data = new
                     {
-                        merchant = new { identifier = merchantcode },
+                        merchant = new { identifier = merchantcode.Value },
                         transaction = new
                         {
                             deviceIdentifier = "S",
-                            currency = currency,
+                            currency = currency.Value,
                             identifier = authorizationTransactionCode,
                             dateTime = day.ToString("dd-M-yyyy"),
                             //string.Format("{0:d/M/yyyy}", day.ToString()),
@@ -1012,7 +1037,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
                     client.DefaultRequestHeaders.Accept.Clear();
                     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                    HttpResponseMessage response = client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content).Result;
+                    HttpResponseMessage response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
                     var respStr = response.Content.ReadAsStringAsync();
                     data = null;
                     JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(respStr));
@@ -1024,47 +1049,55 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                         if (cntK == diff)
                         {
                             transDetails.Add(tokens);
-                            ;
                             tokens = null;
                         }
                         //  break;
                     }
                     else
                     {
-                        ////
-                        if (order.PaymentStatusId != 30)
+                        if (tokens[6]["paymentTransaction"]["statusCode"].ToString() == SUCCESS_CODE)
                         {
-                            string amount = tokens[6]["paymentTransaction"]["amount"].ToString();
-                            order.PaymentStatusId = 30;
-                            await _orderService.UpdateOrderAsync(order);
-                            var orderNote = new OrderNote
+                            if (order.PaymentStatusId != (int)PaymentStatus.Paid)
                             {
-                                DisplayToCustomer = false,
-                                Note = "Order has been marked as Paid.Amount = " + amount + "",
-                                CreatedOnUtc = DateTime.UtcNow
-                            };
-
-                            await _orderService.InsertOrderNoteAsync(orderNote);
-
-                            //await _orderService.UpdateOrderAsync(order);
-                            await _customerActivityService.InsertActivityAsync("EditOrder",
+                                string amount = tokens[6]["paymentTransaction"]["amount"].ToString();
+                                order.AuthorizationTransactionResult = tokens[6]["paymentTransaction"]["statusMessage"].ToString();
+                                order.PaymentStatusId = (int)PaymentStatus.Paid;
+                                order.OrderStatusId = (int)OrderStatus.Processing;
+                                await _orderService.UpdateOrderAsync(order);
+                                lstUpdatedOrders.Add(order.Id);
+                                var orderNote = new OrderNote
+                                {
+                                    OrderId = order.Id,
+                                    DisplayToCustomer = false,
+                                    Note = "Order has been marked as Paid.Amount = " + amount + "",
+                                    CreatedOnUtc = DateTime.UtcNow
+                                };
+                                await _orderService.InsertOrderNoteAsync(orderNote);
+                                await _customerActivityService.InsertActivityAsync("EditOrder",
                                 string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
+                            }
                         }
-                        ///
                         transDetails.Add(tokens);
-                        ;
                         tokens = null;
-                        //break;
                     }
                     //}
                 }
                 ViewBag.transDetails = transDetails;
+                if (lstUpdatedOrders.Count > 0)
+                {
+                    _notificationService.SuccessNotification("Order status updated for Order No(s) : " + string.Join(",", lstUpdatedOrders.Select(n => n.ToString()).ToArray()));
+                }
+                else
+                {
+                    _notificationService.SuccessNotification("No orders were found for the status to be updated");
+                }
+
             }
             catch (Exception ex)
             {
                 //   throw;
             }
-            return View("~/Plugins/Payments.Worldline/Views/Reconcile.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/Reconcile.cshtml");
         }
 
         //[AuthorizeAdmin]
@@ -1175,19 +1208,18 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         //}
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
-        public ActionResult OfflineVerification()
+        public async Task<ActionResult> OfflineVerificationAsync()
         {
             try
             {
                 string path = _env.WebRootPath;
                 string tranId = GenerateRandomString(12);
                 ViewBag.tranId = tranId;
-                var merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode").Result.Value.ToString();
+                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
 
-                var currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency").Result.Value.ToString();
-
-                ViewBag.merchantcode = merchantcode.ToString();
-                ViewBag.currency = currency.ToString();
+                ViewBag.merchantcode = merchantcode.Value.ToString();
+                ViewBag.currency = currency.Value.ToString();
                 using (StreamReader r = new StreamReader(path + "\\output.json"))
                 {
                     string json = r.ReadToEnd();
@@ -1198,30 +1230,30 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             {
                 // throw;
             }
-            return View("~/Plugins/Payments.Worldline/Views/OfflineVerification.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/OfflineVerification.cshtml");
         }
 
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
         [HttpPost]
-        public ActionResult OfflineVerification(IFormCollection fc)
+        public async Task<ActionResult> OfflineVerificationAsync(IFormCollection fc)
         {
             try
             {
                 string path = _env.WebRootPath;
-                string json = "";
-                string merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode").Result.Value;
-                string currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency").Result.Value;
-                ViewBag.merchantcode = merchantcode;
-                ViewBag.currency = currency;
+                //string json = "";
+                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+                ViewBag.merchantcode = merchantcode.Value.ToString();
+                ViewBag.currency = currency.Value.ToString();
                 DateTime start_date = DateTime.Parse(fc["date"].ToString());
                 var data = new
                 {
-                    merchant = new { identifier = merchantcode },
+                    merchant = new { identifier = merchantcode.Value },
                     transaction = new
                     {
                         deviceIdentifier = "S",
-                        currency = currency,
+                        currency = currency.Value,
                         identifier = fc["merchantRefNo"].ToString(),
                         dateTime = start_date.ToString("dd-M-yyyy"),
                         //string.Format("{0:d/M/yyyy}", day.ToString()),
@@ -1233,94 +1265,122 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                HttpResponseMessage response = client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content).Result;
+                var response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
                 var respStr = response.Content.ReadAsStringAsync();
 
                 data = null;
-                JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(respStr));
+                JObject dual_verification_result = JObject.Parse(JsonConvert.SerializeObject(respStr));
                 var jsonData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
 
                 List<JToken> tokens = jsonData.Children().ToList();
                 ViewBag.Tokens = tokens;
                 //var transaction_ids = fc["merchantRefNo"].ToString().Replace(System.Environment.NewLine, "").Replace(" ", "").Split(',');
                 //List<JToken> tokens = new List<JToken>();
-                var transDetails = new List<object>();
+                //var transDetails = new List<object>();
             }
             catch (Exception ex)
             {
                 //   throw;
             }
-            return View("~/Plugins/Payments.Worldline/Views/OfflineVerification.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/OfflineVerification.cshtml");
         }
-        
+
         public async Task<ActionResult> s2s(string msg)
         {
             try
             {
-                //string json = string.Empty;
-                string path = _env.WebRootPath;
-                string tranId = GenerateRandomString(12);
-                ViewBag.tranId = tranId;
-
                 var data = msg.Split('|');
-                ViewBag.clnt_txn_ref = data[3];
-                ViewBag.pg_txn_id = data[5];
-                //var dejson=JsonConvert.DeserializeObject(json);
-                //JavaScriptSerializer js = new JavaScriptSerializer();
-                //JsonSerializer js = new JsonSerializer();  //Added_N 
-                //string jtRead=js.Serialize(json,);
-
-                //dynamic dejson = js.Deserialize<dynamic>(json);
-
-                //var dejson = JsonConvert.DeserializeObject<dynamic>(json);
-                // dynamic dejson = js.Deserialize<dynamic>(jsonTextReader);
-
-                StringBuilder res = new StringBuilder();
-                for (int i = 0; i < data.Length - 1; i++)
+                if (data.Length == 16)
                 {
-                    res.Append(data[i] + "|");
-                }
-                var salt = _settingService.GetSettingAsync("worldlinepaymentsettings.SALT").Result.Value.ToString();
-
-                string data_string = res.ToString() + salt;// dejson["SALT"];
-                var hash = GenerateSHA512StringFors2s(data_string);
-                //var hash = GenerateSHA512StringFors2s(data_string);
-                //if (data[15].ToString() == hash.Data.ToString().ToLower())
-                //if (data[15].ToString() == hash.Value.ToString().ToLower())
-                //{
-                //    ViewBag.status = "1";
-                //}
-                //else
-                //{
-                //    ViewBag.status = "0";
-                //}
-                if (data[15].ToString() == hash.Value.ToString().ToLower())
-                {
-                    ViewBag.status = "1";
-                    Order order = _orderRepository.Table.Where(a => a.AuthorizationTransactionId == data[5].ToString()).FirstOrDefault();
-                    //
-                    if (order.PaymentStatusId != 30)
+                    ViewBag.clnt_txn_ref = data[5];
+                    ViewBag.pg_txn_id = data[3];
+                    StringBuilder res = new StringBuilder();
+                    for (int i = 0; i < data.Length - 1; i++)
                     {
-                        string amount = data[6].ToString();
-                        order.PaymentStatusId = 30;
-                        await _orderService.UpdateOrderAsync(order);
-                        OrderNote objOrderNote = new OrderNote
-                        {
-                            Note = "Order has been marked as Paid. Amount = " + amount + "",
-                            DisplayToCustomer = false,
-                            CreatedOnUtc = DateTime.UtcNow,
-                            OrderId = order.Id
-                        };
-                        await _orderService.InsertOrderNoteAsync(objOrderNote);
-                        //await _orderService.UpdateOrderAsync(order);
-                        await _customerActivityService.InsertActivityAsync("EditOrder",
-                            string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
+                        res.Append(data[i] + "|");
                     }
-                    //
+                    var salt = await _settingService.GetSettingAsync("worldlinepaymentsettings.SALT");
+
+                    string data_string = res.ToString() + salt.Value;
+                    var hash = GenerateSHA512StringFors2s(data_string);
+                    if (data[15].ToString() == hash.Value.ToString().ToLower())
+                    {
+                        //ViewBag.status = "1";
+                        Order order = _orderRepository.Table.Where(a => a.AuthorizationTransactionId == data[3].ToString()).ToList().FirstOrDefault();
+                        //
+                        if (order.PaymentStatusId != (int)PaymentStatus.Paid)
+                        {
+                            var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                            var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+
+                            var strJ = new
+                            {
+                                merchant = new
+                                {
+                                    identifier = merchantcode.Value //config_data["merchantCode"].ToString()
+                                },
+                                transaction = new
+                                {
+                                    deviceIdentifier = "S",
+                                    currency = currency.Value, //config_data["currency"],
+                                    dateTime = string.Format("{0:d/M/yyyy}", data[8].ToString()),
+                                    token = data[5].ToString(),
+                                    requestType = "S"
+                                }
+                            };
+                            HttpContent content = new StringContent(JsonConvert.SerializeObject(strJ));
+                            HttpClient client = new HttpClient
+                            {
+                                BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req")
+                            };
+                            client.DefaultRequestHeaders.Accept.Clear();
+                            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                            HttpResponseMessage response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
+                            var result = response.Content.ReadAsStringAsync();
+
+                            JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(result));
+                            var dualVerificationData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
+                            List<JToken> dualVerificationTokens = dualVerificationData.Children().ToList();
+
+                            var paymentData = JObject.Parse(dualVerificationTokens[6].ToString()).Children();
+                            List<JToken> paymentTokens = paymentData.Children().ToList();
+
+                            if (paymentTokens[7]["statusCode"].ToString() == SUCCESS_CODE)
+                            {
+                                order.AuthorizationTransactionResult = paymentTokens[7]["statusMessage"].ToString();
+                                order.PaymentStatusId = (int)PaymentStatus.Paid;
+                                order.OrderStatusId = (int)OrderStatus.Processing;
+                                await _orderService.UpdateOrderAsync(order);
+                                string amount = data[6].ToString();
+                                OrderNote objOrderNote = new OrderNote
+                                {
+                                    Note = "Order has been marked as Paid. Amount = " + amount + "",
+                                    DisplayToCustomer = false,
+                                    CreatedOnUtc = DateTime.UtcNow,
+                                    OrderId = order.Id
+                                };
+                                await _orderService.InsertOrderNoteAsync(objOrderNote);
+                                ViewBag.status = "Order payment status marked as Paid.";
+                            }
+
+                            //await _orderService.UpdateOrderAsync(order);
+                            await _customerActivityService.InsertActivityAsync("EditOrder",
+                                string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
+                        }
+                        else
+                        {
+                            ViewBag.status = "Order status is already marked as paid.";
+                        }
+                    }
+                    else
+                    {
+                        ViewBag.status = "Invalid input provided.";
+                    }
                 }
                 else
                 {
-                    ViewBag.status = "0";
+                    ViewBag.status = "Invalid input provided.";
                 }
             }
             catch (Exception ex)
@@ -1333,24 +1393,23 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
         public async Task<ActionResult> RefundAsync()
-
         {
             try
             {
                 string path = _env.WebRootPath;
                 string tranId = GenerateRandomString(12);
                 ViewBag.tranId = tranId;
-                var merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode").Result.Value.ToString();
-                var currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency").Result.Value.ToString();
-                ViewBag.merchantcode = merchantcode.ToString();
-                ViewBag.currency = currency.ToString();
+                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+                ViewBag.merchantcode = merchantcode.Value;
+                ViewBag.currency = currency.Value;
             }
             catch (Exception ex)
             {
 
                 //       throw;
             }
-            return View("~/Plugins/Payments.Worldline/Views/Refund.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/Refund.cshtml");
             // return View();
         }
 
@@ -1363,10 +1422,10 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             {
                 string path = _env.WebRootPath;
                 string json = string.Empty;
-                string merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode").Result.Value.ToString();
-                string currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency").Result.Value.ToString();
-                ViewBag.merchantcode = merchantcode;
-                ViewBag.currency = currency;
+                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+                ViewBag.merchantcode = merchantcode.Value;
+                ViewBag.currency = currency.Value;
                 //using (StreamReader r = new StreamReader(path + "\\output.json"))
                 //{
                 //    json = r.ReadToEnd();
@@ -1376,7 +1435,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 DateTime start_date = DateTime.Parse(fc["inputDate"].ToString());
                 var data = new
                 {
-                    merchant = new { identifier = merchantcode },
+                    merchant = new { identifier = merchantcode.Value },
                     cart = new
                     {
                     },
@@ -1384,7 +1443,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     {
                         deviceIdentifier = "S",
                         amount = fc["amount"].ToString(),
-                        currency = currency,
+                        currency = currency.Value,
                         dateTime = start_date.ToString("dd-MM-yyyy"),
                         token = fc["token"].ToString(),
                         //string.Format("{0:d/M/yyyy}", day.ToString()),
@@ -1396,7 +1455,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                HttpResponseMessage response = client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content).Result;
+                var response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
                 var respStr = response.Content.ReadAsStringAsync();
                 //data = null;
                 JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(respStr));
@@ -1408,7 +1467,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 if (statusCode == "0499") //Change the code as per requirement
                 {
                     Order order = _orderRepository.Table.Where(a => a.AuthorizationTransactionId == fc["token"].ToString()).ToList().FirstOrDefault();
-                    order.PaymentStatusId = 40;
+                    order.PaymentStatusId = (int)PaymentStatus.Refunded;
                     await _orderService.UpdateOrderAsync(order);
                     OrderNote objOrderNote = new OrderNote
                     {
@@ -1428,7 +1487,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             {
                 //   throw;
             }
-            return View("~/Plugins/Payments.Worldline/Views/Refund.cshtml");
+            return View("/Plugins/Payments.Worldline/Views/Refund.cshtml");
         }
 
         public static string GenerateRandomString(int size)
@@ -1440,7 +1499,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             var builder = random1.Substring(0, size);
             return builder.ToString();
         }
-    
+
         public JsonResult GenerateSHA512StringFors2s(string inputString) //Addded_NM
         {
             using (SHA512 sha512Hash = SHA512.Create())
