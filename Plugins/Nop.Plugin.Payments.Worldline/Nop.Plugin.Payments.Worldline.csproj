@@ -25,6 +25,7 @@
     <None Remove="Views\Reconcile.cshtml" />
     <None Remove="Views\s2s.cshtml" />
     <None Remove="Views\_ViewImports.cshtml" />
+    <None Remove="Views\PaymentCheckout.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -50,6 +51,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Views\_ViewImports.cshtml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Views\PaymentCheckout.cshtml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

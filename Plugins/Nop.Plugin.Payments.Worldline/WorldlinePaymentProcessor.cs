@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.AspNetCore.WebUtilities;
-using Newtonsoft.Json.Linq;
 using Nop.Core;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Domain.Orders;
@@ -53,9 +51,10 @@ namespace Nop.Plugin.Payments.Worldline
         private readonly IStateProvinceService _stateProvinceService;
         private readonly ITaxService _taxService;
         private readonly IWebHelper _webHelper;
-        private readonly WorldlineStandardHttpClient _WorldlineHttpClient;
-        private readonly WorldlinePaymentSettings _WorldlinePaymentSettings;
-        private readonly IPermissionService _PermissionService;
+        private readonly WorldlineStandardHttpClient _worldlineHttpClient;
+        private readonly WorldlinePaymentSettings _worldlinePaymentSettings;
+        private readonly IPermissionService _permissionService;
+        //private readonly WorldlineHelper _worldlineHelper;
 
         #endregion
 
@@ -96,8 +95,9 @@ namespace Nop.Plugin.Payments.Worldline
             _stateProvinceService = stateProvinceService;
             _taxService = taxService;
             _webHelper = webHelper;
-            _WorldlineHttpClient = worldlineHttpClient;
-            _WorldlinePaymentSettings = worldlinePaymentSettings;
+            _worldlineHttpClient = worldlineHttpClient;
+            _worldlinePaymentSettings = worldlinePaymentSettings;
+            //_worldlineHelper = worldlineHelper;
         }
 
         #endregion
@@ -166,7 +166,7 @@ namespace Nop.Plugin.Payments.Worldline
             return new Dictionary<string, string>
             {
                 //Worldline ID or an email address associated with your Worldline account
-                ["business"] = _WorldlinePaymentSettings.BusinessEmail,
+                ["business"] = _worldlinePaymentSettings.BusinessEmail,
 
                 //the character set and character encoding
                 ["charset"] = "utf-8",
@@ -343,7 +343,7 @@ namespace Nop.Plugin.Payments.Worldline
         /// </returns>
         public async Task<(bool result, Dictionary<string, string> values, string response)> GetPdtDetailsAsync(string tx)
         {
-            var response = WebUtility.UrlDecode(await _WorldlineHttpClient.GetPdtDetailsAsync(tx));
+            var response = WebUtility.UrlDecode(await _worldlineHttpClient.GetPdtDetailsAsync(tx));
 
             var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             bool firstLine = true, success = false;
@@ -366,7 +366,6 @@ namespace Nop.Plugin.Payments.Worldline
             return (success, values, response);
         }
 
-
         /// <summary>
         /// Verifies IPN
         /// </summary>
@@ -377,7 +376,7 @@ namespace Nop.Plugin.Payments.Worldline
         /// </returns>
         public async Task<(bool result, Dictionary<string, string> values)> VerifyIpnAsync(string formString)
         {
-            var response = WebUtility.UrlDecode(await _WorldlineHttpClient.VerifyIpnAsync(formString));
+            var response = WebUtility.UrlDecode(await _worldlineHttpClient.VerifyIpnAsync(formString));
             var success = response.Trim().Equals("VERIFIED", StringComparison.OrdinalIgnoreCase);
 
             var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -412,42 +411,44 @@ namespace Nop.Plugin.Payments.Worldline
         /// <returns>A task that represents the asynchronous operation</returns>
         public async Task PostProcessPaymentAsync(PostProcessPaymentRequest postProcessPaymentRequest)
         {
-            var baseUrl = _WorldlinePaymentSettings.UseSandbox ?
-                "https://www.sandbox.Worldline.com/us/cgi-bin/webscr" :
-                "https://www.Worldline.com/us/cgi-bin/webscr";
-
-            //create common query parameters for the request
             var queryParameters = await CreateQueryParametersAsync(postProcessPaymentRequest);
-
-            //whether to include order items in a transaction
-            if (_WorldlinePaymentSettings.PassProductNamesAndTotals)
-            {
-                //add order items query parameters to the request
-                var parameters = new Dictionary<string, string>(queryParameters);
-                await AddItemsParametersAsync(parameters, postProcessPaymentRequest);
-
-                //remove null values from parameters
-                parameters = parameters.Where(parameter => !string.IsNullOrEmpty(parameter.Value))
-                    .ToDictionary(parameter => parameter.Key, parameter => parameter.Value);
-
-                //ensure redirect URL doesn't exceed 2K chars to avoid "too long URL" exception
-                var redirectUrl = QueryHelpers.AddQueryString(baseUrl, parameters);
-                if (redirectUrl.Length <= 2048)
-                {
-                    _httpContextAccessor.HttpContext.Response.Redirect(redirectUrl);
-                    return;
-                }
-            }
-
-            //or add only an order total query parameters to the request
-            await AddOrderTotalParametersAsync(queryParameters, postProcessPaymentRequest);
+            var parameters = new Dictionary<string, string>(queryParameters);
+            string amount, orderid, txnId;
+            txnId = GenerateRandomString();
+            amount = postProcessPaymentRequest.Order.OrderTotal.ToString("0.00");
+            orderid = postProcessPaymentRequest.Order.Id.ToString();
+            List<string> hashValues = new List<string>();
+            hashValues.Add(_worldlinePaymentSettings.merchantCode);
+            hashValues.Add(txnId);
+            hashValues.Add(amount);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(DateTime.Now.ToShortDateString());
+            hashValues.Add(DateTime.Now.AddYears(10).ToShortDateString());
+            hashValues.Add(amount);
+            hashValues.Add("M");
+            hashValues.Add(_worldlinePaymentSettings.frequency);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(string.Empty);
+            hashValues.Add(_worldlinePaymentSettings.SALT);
+            string input = string.Join('|', hashValues.ToArray());
+            string token = GenerateSHA512String(input);
+            
+            await AddItemsParametersAsync(parameters, postProcessPaymentRequest);
 
             //remove null values from parameters
-            queryParameters = queryParameters.Where(parameter => !string.IsNullOrEmpty(parameter.Value))
+            parameters = parameters.Where(parameter => !string.IsNullOrEmpty(parameter.Value))
                 .ToDictionary(parameter => parameter.Key, parameter => parameter.Value);
-
-            var url = QueryHelpers.AddQueryString(baseUrl, queryParameters);
-            _httpContextAccessor.HttpContext.Response.Redirect(url);
+            _httpContextAccessor.HttpContext.Response.Cookies.Append("txnId", txnId);
+            _httpContextAccessor.HttpContext.Response.Cookies.Append("orderid", orderid);
+            _httpContextAccessor.HttpContext.Response.Cookies.Append("amount", amount);
+            _httpContextAccessor.HttpContext.Response.Cookies.Append("token", token);
+            var absoluteUri = $"{_webHelper.GetStoreLocation()}Plugins/Worldline/PaymentCheckout";
+            _httpContextAccessor.HttpContext.Response.Redirect(absoluteUri);
         }
 
         /// <summary>
@@ -477,7 +478,7 @@ namespace Nop.Plugin.Payments.Worldline
         public async Task<decimal> GetAdditionalHandlingFeeAsync(IList<ShoppingCartItem> cart)
         {
             return await _orderTotalCalculationService.CalculatePaymentAdditionalFeeAsync(cart,
-                _WorldlinePaymentSettings.AdditionalFee, _WorldlinePaymentSettings.AdditionalFeePercentage);
+                _worldlinePaymentSettings.AdditionalFee, _worldlinePaymentSettings.AdditionalFeePercentage);
         }
 
         /// <summary>
@@ -752,6 +753,29 @@ namespace Nop.Plugin.Payments.Worldline
             return await _localizationService.GetResourceAsync("Plugins.Payments.Worldline.PaymentMethodDescription");
         }
 
+        public string GenerateRandomString()
+        {
+            //var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
+            //var random = temp.Substring(0, 15);
+            //string shortDate = DateTime.Now.ToShortDateString().Replace("/", string.Empty).Replace("-", string.Empty);
+            //return random.ToString() + shortDate;
+            var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
+            var barcode = Regex.Replace(temp, "[a-zA-Z]", string.Empty).Substring(0, 10);
+
+            return barcode.ToString();
+        }
+
+        public string GenerateSHA512String(string inputString)
+        {
+            using (SHA512 sha512Hash = SHA512.Create())
+            {
+                //From String to byte array
+                byte[] sourceBytes = Encoding.UTF8.GetBytes(inputString);
+                byte[] hashBytes = sha512Hash.ComputeHash(sourceBytes);
+                string hash = BitConverter.ToString(hashBytes).Replace("-", String.Empty);
+                return hash;
+            }
+        }
         #endregion
 
         #region Properties

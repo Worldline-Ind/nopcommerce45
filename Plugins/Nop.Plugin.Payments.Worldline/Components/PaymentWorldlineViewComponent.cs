@@ -52,35 +52,9 @@ namespace Nop.Plugin.Payments.Worldline.Components
             ViewBag.tranId = tranId;
 
             ViewBag.debitStartDate = DateTime.Now.ToString("yyyy-MM-dd");
-            int year = Convert.ToInt32(DateTime.Now.Year.ToString());
             DateTime date = DateTime.Now;
             var enddate = date.AddYears(30);
             ViewBag.debitEndDate = enddate.ToString("yyyy-MM-dd");
-
-            using (StreamReader r = new StreamReader(path + "//output.json"))
-            {
-                string json = r.ReadToEnd();
-
-                ViewBag.config_data = json;
-                var jsonData = JObject.Parse(json).Children();
-                List<JToken> tokens = jsonData.Children().ToList();
-                if (Convert.ToBoolean(tokens[25]) == true)
-                {
-                    if (Convert.ToBoolean(tokens[34]) == true)
-                    {
-                        ViewBag.enbSi = Convert.ToBoolean(tokens[25]);
-                    }
-                    else
-                    {
-                        ViewBag.enbSi = false;
-                    }
-                }
-                else
-                {
-                    ViewBag.enbSi = false;
-                }
-            }
-
             var cart = await _shoppingCartService.GetShoppingCartAsync(await _workContext.GetCurrentCustomerAsync(), ShoppingCartType.ShoppingCart, _storeContext.GetCurrentStoreAsync().Result.Id);
             var model = _shoppingCartModelFactory.PrepareOrderTotalsModelAsync(cart, false);
 
