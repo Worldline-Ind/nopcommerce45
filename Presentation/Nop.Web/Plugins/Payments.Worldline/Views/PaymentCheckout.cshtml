@@ -9,18 +9,8 @@
     var jsLink = $"{webHelper.GetStoreLocation()}Plugins/Worldline/js/jquery.unobtrusive-ajax.min.js";
     //    var returl = $"{webHelper.GetStoreLocation()}checkout/OpcSavePaymentInfo";
 }
-<h3>Test Redirect - @Model.Token </h3>
 <div id="worldline_embeded_popup"></div>
-@*<script asp-exclude-from-bundle="true" asp-location="Footer" src="https://www.paynimo.com/paynimocheckout/client/lib/jquery.min.js"></script>*@
 <script type='text/javascript' asp-location="Footer">
-     //var my_awesome_script = document.createElement('script');
-    //my_awesome_script.setAttribute('src', 'https://www.paynimo.com/paynimocheckout/client/lib/jquery.min.js');
-    //my_awesome_script.setAttribute('type', 'application/javascript');
-    //document.head.appendChild(my_awesome_script);
-    //var second_script= document.createElement('script');
-    //second_script.setAttribute('src', 'https://www.paynimo.com/paynimocheckout/server/lib/checkout.js');
-    //second_script.setAttribute('type', 'application/javascript');
-    //document.body.appendChild(second_script);
     function handleResponse(res) {
         if (typeof res != 'undefined' && typeof res.paymentMethod != 'undefined' && typeof res.paymentMethod.paymentTransaction != 'undefined' && typeof res.paymentMethod.paymentTransaction.statusCode != 'undefined' && res.paymentMethod.paymentTransaction.statusCode == '0300') {
             // success block
@@ -49,7 +39,6 @@
     };
     $(document).ready(function() { 
     var data = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model));
-    alert(data.PaymentModeOrder)
     var paymentModeOrder = data.PaymentModeOrder;
     paymentModeOrder = paymentModeOrder.replace(" ", "");
     var paymentModeOrderArr = paymentModeOrder.split(",");
@@ -100,7 +89,6 @@
                 "frequency": "ADHO"
             }
         }
-        alert(JSON.stringify(configJson))
         $.pnCheckout(configJson);
         if (configJson.features.enableNewWindowFlow) {
             pnCheckoutShared.openNewWindow();
