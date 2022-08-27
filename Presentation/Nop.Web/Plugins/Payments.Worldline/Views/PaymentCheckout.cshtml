@@ -1,0 +1,114 @@
+﻿@using Nop.Core
+@model Nop.Plugin.Payments.Worldline.Models.PaymentViewModel
+@inject IWebHelper webHelper
+@inject Nop.Web.Framework.UI.INopHtmlHelper htmlHelper
+@{
+    Layout = "";
+    htmlHelper.AppendScriptParts(Nop.Web.Framework.UI.ResourceLocation.Head, "https://www.paynimo.com/paynimocheckout/client/lib/jquery.min.js", "", true, false);
+    htmlHelper.AppendScriptParts(Nop.Web.Framework.UI.ResourceLocation.Footer, "https://www.paynimo.com/paynimocheckout/server/lib/checkout.js", "", true, false);
+    var jsLink = $"{webHelper.GetStoreLocation()}Plugins/Worldline/js/jquery.unobtrusive-ajax.min.js";
+    //    var returl = $"{webHelper.GetStoreLocation()}checkout/OpcSavePaymentInfo";
+}
+<h3>Test Redirect - @Model.Token </h3>
+<div id="worldline_embeded_popup"></div>
+@*<script asp-exclude-from-bundle="true" asp-location="Footer" src="https://www.paynimo.com/paynimocheckout/client/lib/jquery.min.js"></script>*@
+<script type='text/javascript' asp-location="Footer">
+     //var my_awesome_script = document.createElement('script');
+    //my_awesome_script.setAttribute('src', 'https://www.paynimo.com/paynimocheckout/client/lib/jquery.min.js');
+    //my_awesome_script.setAttribute('type', 'application/javascript');
+    //document.head.appendChild(my_awesome_script);
+    //var second_script= document.createElement('script');
+    //second_script.setAttribute('src', 'https://www.paynimo.com/paynimocheckout/server/lib/checkout.js');
+    //second_script.setAttribute('type', 'application/javascript');
+    //document.body.appendChild(second_script);
+    function handleResponse(res) {
+        if (typeof res != 'undefined' && typeof res.paymentMethod != 'undefined' && typeof res.paymentMethod.paymentTransaction != 'undefined' && typeof res.paymentMethod.paymentTransaction.statusCode != 'undefined' && res.paymentMethod.paymentTransaction.statusCode == '0300') {
+            // success block
+            alert("success");
+        } else if (typeof res != 'undefined' && typeof res.paymentMethod != 'undefined' && typeof res.paymentMethod.paymentTransaction != 'undefined' && typeof res.paymentMethod.paymentTransaction.statusCode != 'undefined' && res.paymentMethod.paymentTransaction.statusCode == '0398') {
+            // initiated block
+            alert("initiated");
+        } else {
+            // error block
+            alert("error");
+        }
+    };
+
+    function formatDate(date) {
+        var d = new Date(date),
+            month = '' + (d.getMonth() + 1 ),
+            day = '' + d.getDate(),
+            year = d.getFullYear();
+
+        if (month.length < 2)
+            month = '0' + month;
+        if (day.length < 2)
+            day = '0' + day;
+        //  alert([day, month, year].join('-'));
+        return [day, month, year].join('-');
+    };
+    $(document).ready(function() { 
+    var data = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model));
+    alert(data.PaymentModeOrder)
+    var paymentModeOrder = data.PaymentModeOrder;
+    paymentModeOrder = paymentModeOrder.replace(" ", "");
+    var paymentModeOrderArr = paymentModeOrder.split(",");
+    if (data.EmbedPaymentGatewayOnPage == false) {
+        var embdPmntGtway = "";
+    } else {
+        var embdPmntGtway = "#worldline_embeded_popup";
+    }
+    var configJson = {
+            "tarCall": false,
+            "features": {
+                "showPGResponseMsg": data.ShowPGResponseMsg,
+                "enableAbortResponse": data.EnableAbortResponse,
+                "enableExpressPay": data.EnableExpressPay,
+                "enableNewWindowFlow": data.EnableNewWindowFlow,
+                "separateCardMode": data.SeparateCardMode,
+            },
+            "consumerData":
+            {
+                "deviceId": "WEBSH2",
+                "token": data.Token,
+                "returnUrl": data.ReturnUrl,
+                "paymentMode": data.PaymentMode,
+                "paymentModeOrder": paymentModeOrderArr,
+                "checkoutElement": embdPmntGtway,
+                "merchantLogoUrl": data.PaymentMerchantLogoUrl,
+                "merchantId": data.MerchantCode,
+                "merchantMsg": data.MerchantMsg,
+                "disclaimerMsg": data.DisclaimerMsg,
+                "currency": data.Currency,
+                "txnId": data.TransactionId,
+                "items": [{
+                    "itemId": data.MerchantSchemeCode,
+                    "amount": data.Amount,
+                    "comAmt": "0"
+                }],
+                "customStyle":
+                {
+                    "PRIMARY_COLOR_CODE": data.PrimaryColor,
+                    "SECONDARY_COLOR_CODE": data.SecondaryColor,
+                    "BUTTON_COLOR_CODE_1": data.ButtonColor1,
+                    "BUTTON_COLOR_CODE_2": data.ButtonColor2,
+                },
+                "debitStartDate": data.DebitStartDate,
+                "debitEndDate": data.DebitEndDate,
+                "maxAmount": data.Amount,
+                "amountType": "M",
+                "frequency": "ADHO"
+            }
+        }
+        alert(JSON.stringify(configJson))
+        $.pnCheckout(configJson);
+        if (configJson.features.enableNewWindowFlow) {
+            pnCheckoutShared.openNewWindow();
+        }
+});
+</script>
+
+@htmlHelper.GenerateScripts(Nop.Web.Framework.UI.ResourceLocation.Head)
+@htmlHelper.GenerateScripts(Nop.Web.Framework.UI.ResourceLocation.Footer)
+@htmlHelper.GenerateInlineScripts(Nop.Web.Framework.UI.ResourceLocation.Footer)
+@*@htmlHelper.GenerateInlineScripts(ResourceLocation.Footer)*@

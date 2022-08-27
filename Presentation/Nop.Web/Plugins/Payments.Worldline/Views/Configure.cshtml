@@ -1,0 +1,484 @@
+﻿@model Nop.Plugin.Payments.Worldline.Models.ConfigurationModel
+@inject Nop.Core.IWebHelper webHelper
+
+@{
+    Layout = "_ConfigurePlugin";
+}
+@await Component.InvokeAsync("StoreScopeConfiguration")
+<script>
+	$(document).ready(function () {
+        $("#@Html.IdFor(model => model.PassProductNamesAndTotals)").click(togglePassProductNamesAndTotals);
+	    togglePassProductNamesAndTotals();
+	});
+
+    function togglePassProductNamesAndTotals() {
+        warningValidation('@Url.Action("RoundingWarning", "Worldline")', '@Html.NameFor(model => model.PassProductNamesAndTotals)',
+            { passProductNamesAndTotals: $('#@Html.IdFor(model => model.PassProductNamesAndTotals)').is(':checked') });
+    }
+</script>
+<form asp-controller="Worldline" asp-action="Configure" method="post">
+    <div class="cards-group">
+        <div class="card card-default">
+            <div class="card-body">
+                @*@Html.Raw(T("Plugins.Payments.Worldline.Instructions", $"{webHelper.GetStoreLocation()}Plugins/PaymentWorldline/PDTHandler"))*@
+                <input name="Utf8" type="hidden" value="&#x2713;" />
+                <input type="hidden" name="Authenticity_token" value="" />
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="MerchantCode_OverrideForStore" asp-input="MerchantCode" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="MerchantCode" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="MerchantCode" />
+                        <span asp-validation-for="MerchantCode"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="MerchantSchemeCode_OverrideForStore" asp-input="MerchantSchemeCode" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="MerchantSchemeCode" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="MerchantSchemeCode" />
+                        <span asp-validation-for="MerchantSchemeCode"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="SALT_OverrideForStore" asp-input="SALT" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="SALT" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="SALT" />
+                        <span asp-validation-for="SALT"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="Currency_OverrideForStore" asp-input="Currency" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="Currency" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="Currency" asp-items="@ViewBag.currencyCodes " />
+                        <span asp-validation-for="Currency"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="TypeOfPayment_OverrideForStore" asp-input="TypeOfPayment" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="TypeOfPayment" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="TypeOfPayment" asp-items="@ViewBag.typeOfPayment " />
+                        <span asp-validation-for="TypeOfPayment"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="PrimaryColor_OverrideForStore" asp-input="PrimaryColor" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="PrimaryColor" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="PrimaryColor" />
+                        @*<div title="Color value can be hex, rgb or actual color name" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="PrimaryColor"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="SecondaryColor_OverrideForStore" asp-input="SecondaryColor" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="SecondaryColor" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="SecondaryColor" />
+                       @*<div title="Color value can be hex, rgb or actual color name" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="SecondaryColor"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ButtonColor1_OverrideForStore" asp-input="ButtonColor1" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ButtonColor1" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="ButtonColor1" />
+                        @*<div title="Color value can be hex, rgb or actual color name" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ButtonColor1"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ButtonColor2_OverrideForStore" asp-input="ButtonColor2" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ButtonColor2" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="ButtonColor2" />
+                        @*<div title="Color value can be hex, rgb or actual color name" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ButtonColor2"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="LogoURL_OverrideForStore" asp-input="LogoURL" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="LogoURL" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="LogoURL" />
+                       @* <div title="An absolute URL pointing to a logo image of merchant which will show on checkout popup" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="LogoURL"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableExpressPay_OverrideForStore" asp-input="EnableExpressPay" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableExpressPay" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableExpressPay" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="To enable saved payments set its value to yes" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableExpressPay"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="SeparateCardMode_OverrideForStore" asp-input="SeparateCardMode" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="SeparateCardMode" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="SeparateCardMode" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="If this feature is enabled checkout shows two separate payment mode(Credit Card and Debit Card)" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="SeparateCardMode"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableNewWindowFlow_OverrideForStore" asp-input="EnableNewWindowFlow" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableNewWindowFlow" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableNewWindowFlow" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="If this feature is enabled, then bank page will open in new window" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableNewWindowFlow"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="MerchantMessage_OverrideForStore" asp-input="MerchantMessage" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="MerchantMessage" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="MerchantMessage" />
+                        @*<div title="Customize message from merchant which will be shown to customer in checkout page" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="MerchantMessage"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="DisclaimerMessage_OverrideForStore" asp-input="DisclaimerMessage" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="DisclaimerMessage" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="DisclaimerMessage" />
+                        @*<div title="Customize disclaimer message from merchant which will be shown to customer in checkout page" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="DisclaimerMessage"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ShowPGResponseMsg_OverrideForStore" asp-input="ShowPGResponseMsg" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ShowPGResponseMsg" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="ShowPGResponseMsg" asp-items="@ViewBag.enbDisb " />
+                        <span asp-validation-for="ShowPGResponseMsg"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableAbortResponse_OverrideForStore" asp-input="EnableAbortResponse" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableAbortResponse" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableAbortResponse" asp-items="@ViewBag.enbDisb " />
+                        <span asp-validation-for="EnableAbortResponse"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="PaymentMode_OverrideForStore" asp-input="PaymentMode" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="PaymentMode" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="PaymentMode" asp-items="@ViewBag.paymentModes " />
+                     @*   <div title="If Bank selection is at Worldline ePayments India Pvt. Ltd. (a Worldline brand) end then select all, if bank selection at Merchant end then pass appropriate mode respective to selected option" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="PaymentMode"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="PaymentModeOrder_OverrideForStore" asp-input="PaymentModeOrder" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="PaymentModeOrder" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-textarea asp-for="PaymentModeOrder" />
+                        <span>Please pass order in this format: cards,netBanking,imps,wallets,cashCards,UPI,MVISA,debitPin,NEFTRTGS,emiBanks. Merchant can define their payment mode order</span>
+                        <span asp-validation-for="PaymentModeOrder"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableInstrumentDeRegistration_OverrideForStore" asp-input="EnableInstrumentDeRegistration" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableInstrumentDeRegistration" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableInstrumentDeRegistration" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="If this feature is enabled, you will have an option to delete saved cards" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableInstrumentDeRegistration"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="TransactionType_OverrideForStore" asp-input="TransactionType" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="TransactionType" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="TransactionType" asp-items="@ViewBag.transactionTypes " />
+                        <span asp-validation-for="TransactionType"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="HideSavedInstruments_OverrideForStore" asp-input="HideSavedInstruments" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="HideSavedInstruments" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="HideSavedInstruments" asp-items="@ViewBag.enbDisb " />
+                      @*  <div title="If enabled checkout hides saved payment options even in case of enableExpressPay is enabled" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="HideSavedInstruments"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="SaveInstrument_OverrideForStore" asp-input="SaveInstrument" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="SaveInstrument" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="SaveInstrument" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to vault instrument" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+
+                        <span asp-validation-for="SaveInstrument"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="DisplayTransactionMessageOnPopup_OverrideForStore" asp-input="DisplayTransactionMessageOnPopup" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="DisplayTransactionMessageOnPopup" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="DisplayTransactionMessageOnPopup" asp-items="@ViewBag.enbDisb " />
+                        <span asp-validation-for="DisplayTransactionMessageOnPopup"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EmbedPaymentGatewayOnPage_OverrideForStore" asp-input="EmbedPaymentGatewayOnPage" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EmbedPaymentGatewayOnPage" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EmbedPaymentGatewayOnPage" asp-items="@ViewBag.enbDisb " />
+                        <span asp-validation-for="EmbedPaymentGatewayOnPage"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableSI_OverrideForStore" asp-input="EnableSI" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableSI" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableSI" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="Enable eMandate using this feature" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableSI"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="HideSIDetails_OverrideForStore" asp-input="HideSIDetails" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="HideSIDetails" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="HideSIDetails" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="Enable this feature to hide SI details from the customer" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="HideSIDetails"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="HideSIConfirmation_OverrideForStore" asp-input="HideSIConfirmation" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="HideSIConfirmation" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="HideSIConfirmation" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to hide the confirmation screen in eMandate/eNACH/eSign registration" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="HideSIConfirmation"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ExpandSIDetails_OverrideForStore" asp-input="ExpandSIDetails" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ExpandSIDetails" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="ExpandSIDetails" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to show eMandate/eNACH/eSign details in expanded mode by default" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ExpandSIDetails"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableDebitDay_OverrideForStore" asp-input="EnableDebitDay" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableDebitDay" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableDebitDay" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to acccept debit day value eMandate/eNACH/eSign registration" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableDebitDay"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ShowSIResponseMsg_OverrideForStore" asp-input="ShowSIResponseMsg" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ShowSIResponseMsg" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="ShowSIResponseMsg" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to show eMandate/eNACH/eSign registrations details also in final checkout response" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ShowSIResponseMsg"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ShowSIConfirmation_OverrideForStore" asp-input="ShowSIConfirmation" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ShowSIConfirmation" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="ShowSIConfirmation" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="Enable this feature to show confirmation screen for registration" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ShowSIConfirmation"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="EnableTxnForNonSICards_OverrideForStore" asp-input="EnableTxnForNonSICards" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="EnableTxnForNonSICards" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="EnableTxnForNonSICards" asp-items="@ViewBag.enbDisb " />
+                        @*<div title="Enable this feature to proceed with a normal transaction with same card details" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="EnableTxnForNonSICards"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="ShowAllModesWithSI_OverrideForStore" asp-input="ShowAllModesWithSI" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="ShowAllModesWithSI" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="ShowAllModesWithSI" asp-items="@ViewBag.enbDisb " />
+                       @* <div title="Enable this feature to show all modes with SI" data-toggle="tooltip" class="ico-help"><i class="fa fa-question-circle"></i></div>*@
+                        <span asp-validation-for="ShowAllModesWithSI"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="SiDetailsAtMerchantEnd_OverrideForStore" asp-input="SiDetailsAtMerchantEnd" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="SiDetailsAtMerchantEnd" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="SiDetailsAtMerchantEnd" asp-items="@ViewBag.enbDisb " />
+                        <span asp-validation-for="SiDetailsAtMerchantEnd"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="AmountType_OverrideForStore" asp-input="AmountType" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="AmountType" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="AmountType" asp-items="@ViewBag.amounttype " />
+                        <span asp-validation-for="AmountType"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="Frequency_OverrideForStore" asp-input="Frequency" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="Frequency" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-select asp-for="Frequency" asp-items="@ViewBag.frequency " />
+                        <span asp-validation-for="Frequency"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="BusinessEmail_OverrideForStore" asp-input="BusinessEmail" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="BusinessEmail" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="BusinessEmail" />
+                        <span asp-validation-for="BusinessEmail"></span>
+                    </div>
+                </div>
+                @*<div class="form-group">
+                        <div class="col-md-3">
+                            <nop-override-store-checkbox asp-for="PdtToken_OverrideForStore" asp-input="PdtToken" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                            <nop-label asp-for="PdtToken" />
+                        </div>
+                        <div class="col-md-9">
+                            <nop-editor asp-for="PdtToken" />
+                            <span asp-validation-for="PdtToken"></span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            <nop-override-store-checkbox asp-for="PassProductNamesAndTotals_OverrideForStore" asp-input="PassProductNamesAndTotals" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                            <nop-label asp-for="PassProductNamesAndTotals" />
+                        </div>
+                        <div class="col-md-9">
+                            <nop-editor asp-for="PassProductNamesAndTotals" />
+                            <span asp-validation-for="PassProductNamesAndTotals"></span>
+                        </div>
+                    </div>*@
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="AdditionalFee_OverrideForStore" asp-input="AdditionalFee" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="AdditionalFee" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="AdditionalFee" />
+                        <span asp-validation-for="AdditionalFee"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <nop-override-store-checkbox asp-for="AdditionalFeePercentage_OverrideForStore" asp-input="AdditionalFeePercentage" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
+                        <nop-label asp-for="AdditionalFeePercentage" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="AdditionalFeePercentage" />
+                        <span asp-validation-for="AdditionalFeePercentage"></span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-9 col-md-offset-3">
+                        <input type="submit" name="save" class="btn bg-primary" value="@T("Admin.Common.Save")" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
