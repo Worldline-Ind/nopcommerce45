@@ -3,11 +3,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Nop.Core;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Domain.Orders;
@@ -24,6 +29,7 @@ using Nop.Services.Payments;
 using Nop.Services.Plugins;
 using Nop.Services.Security;
 using Nop.Services.Tax;
+using Nop.Web.Framework;
 using Nop.Web.Framework.Menu;
 
 namespace Nop.Plugin.Payments.Worldline
@@ -31,7 +37,7 @@ namespace Nop.Plugin.Payments.Worldline
     /// <summary>
     /// Worldline payment processor
     /// </summary>
-    public class WorldlinePaymentProcessor : BasePlugin, IPaymentMethod
+    public class WorldlinePaymentProcessor : BasePlugin, IPaymentMethod, IAdminMenuPlugin
     {
         #region Fields
 
@@ -103,47 +109,49 @@ namespace Nop.Plugin.Payments.Worldline
         #endregion
 
         #region Utilities
-
-        //public void ManageSiteMap(SiteMapNode rootNode)
-        //{
-        //    if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
-        //        return;
-
-        //    var myPluginNode = rootNode.ChildNodes.FirstOrDefault(x => x.SystemName == "MyPlugin");
-        //    if (myPluginNode == null)
-        //    {
-        //        myPluginNode = new SiteMapNode()
-        //        {
-        //            SystemName = "MyPlugin",
-        //            Title = "My Plugin",
-        //            Visible = true,
-        //            IconClass = "fa-gear"
-        //        };
-        //        rootNode.ChildNodes.Add(myPluginNode);
-        //    }
-
-        //    myPluginNode.ChildNodes.Add(new SiteMapNode()
-        //    {
-        //        SystemName = "MyPlugin.Configure",
-        //        Title = "Configure",
-        //        ControllerName = "Plugin",
-        //        ActionName = "ConfigureMiscPlugin",
-        //        Visible = true,
-        //        IconClass = "fa-dot-circle-o",
-        //        RouteValues = new RouteValueDictionary() { { "systemName", "Nop.Plugin.Misc.MyPlugin" } },
-        //    });
-
-        //    myPluginNode.ChildNodes.Add(new SiteMapNode()
-        //    {
-        //        SystemName = "MyPlugin.SomeFeatureList",
-        //        Title = "Some Feature",
-        //        ControllerName = "MyPlugin",
-        //        ActionName = "SomeFeatureList",
-        //        Visible = true,
-        //        IconClass = "fa-dot-circle-o",
-        //        RouteValues = new RouteValueDictionary() { { "area", "Admin" } },  //need to register this route since it has /Admin prefix
-        //    });
-        //}
+        public Task ManageSiteMapAsync(SiteMapNode rootNode)
+        {
+            var worldlinePluginNode = new SiteMapNode()
+            {
+                SystemName = "Worldline",
+                Title = "Worldline",
+                IconClass = "far fa-dot-circle",
+                Visible = true,
+                RouteValues = new RouteValueDictionary() { { "area", AreaNames.Admin } },
+            };
+            var menuItemOfflineVerificaion = new SiteMapNode()
+            {
+                SystemName = "Worldline Offline Verification",
+                Title = "Offline Verification",
+                ControllerName = "Worldline",
+                ActionName = "OfflineVerification",
+                IconClass = "far fa-dot-circle",
+                Visible = true,
+                RouteValues = new RouteValueDictionary() { { "area", AreaNames.Admin } },
+            };
+            var menuItemReconcile = new SiteMapNode()
+            {
+                SystemName = "Worldline Reconcile",
+                Title = "Reconcile",
+                ControllerName = "Worldline",
+                ActionName = "Reconcile",
+                IconClass = "far fa-dot-circle",
+                Visible = true,
+                RouteValues = new RouteValueDictionary() { { "area", AreaNames.Admin } },
+            };
+            worldlinePluginNode.ChildNodes.Add(menuItemOfflineVerificaion);
+            worldlinePluginNode.ChildNodes.Add(menuItemReconcile);
+            var pluginNode = rootNode.ChildNodes.FirstOrDefault(x => x.SystemName == "Third party plugins");
+            if (pluginNode != null)
+            {
+                pluginNode.ChildNodes.Add(worldlinePluginNode);
+            }
+            else
+            {
+                rootNode.ChildNodes.Add(worldlinePluginNode);
+            }
+            return Task.CompletedTask;
+        }
 
         /// <summary>
         /// Create common query parameters for the request
@@ -414,9 +422,10 @@ namespace Nop.Plugin.Payments.Worldline
             var queryParameters = await CreateQueryParametersAsync(postProcessPaymentRequest);
             var parameters = new Dictionary<string, string>(queryParameters);
             string amount, orderid, txnId;
-            txnId = GenerateRandomString();
+            //txnId = GenerateRandomString();
             amount = postProcessPaymentRequest.Order.OrderTotal.ToString("0.00");
             orderid = postProcessPaymentRequest.Order.Id.ToString();
+            txnId = GenerateRandomString(15) + orderid;
             List<string> hashValues = new List<string>();
             hashValues.Add(_worldlinePaymentSettings.merchantCode);
             hashValues.Add(txnId);
@@ -502,9 +511,55 @@ namespace Nop.Plugin.Payments.Worldline
         /// A task that represents the asynchronous operation
         /// The task result contains the result
         /// </returns>
-        public Task<RefundPaymentResult> RefundAsync(RefundPaymentRequest refundPaymentRequest)
+        public async Task<RefundPaymentResult> RefundAsync(RefundPaymentRequest refundPaymentRequest)
         {
-            return Task.FromResult(new RefundPaymentResult { Errors = new[] { "Refund method not supported" } });
+            string amount, orderid, txnId, txnDate;
+            var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
+            var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
+            amount = refundPaymentRequest.Order.OrderTotal.ToString("0.00");
+            orderid = refundPaymentRequest.Order.Id.ToString();
+            txnId = refundPaymentRequest.Order.AuthorizationTransactionCode;
+            txnDate = refundPaymentRequest.Order.CreatedOnUtc.Date.ToString("dd-MM-yyyy");
+            var data = new
+            {
+                merchant = new { identifier = merchantcode.Value },
+                cart = new
+                {
+                },
+                transaction = new
+                {
+                    deviceIdentifier = "S",
+                    amount = amount,
+                    currency = currency.Value,
+                    dateTime = txnDate,
+                    token = txnId,
+                    requestType = "R"
+                }
+            };
+            HttpContent content = new StringContent(JsonConvert.SerializeObject(data));
+            HttpClient client = new HttpClient();
+            client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
+            var respStr = response.Content.ReadAsStringAsync();
+            JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(respStr));
+            var jsonData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
+            List<JToken> tokens = jsonData.Children().ToList();
+            string statusCode = tokens[6]["paymentTransaction"]["statusCode"].ToString();
+
+            if (statusCode == "0400")
+            {
+                return await Task.FromResult(new RefundPaymentResult { NewPaymentStatus = Core.Domain.Payments.PaymentStatus.Refunded });
+            }
+            else
+            {
+                RefundPaymentResult refundPaymentResult = new RefundPaymentResult();
+                refundPaymentResult.AddError(tokens[6]["paymentTransaction"]["errorMessage"].ToString());
+                refundPaymentResult.AddError(tokens[6]["paymentTransaction"]["statusMessage"].ToString());
+                return await Task.FromResult(refundPaymentResult);
+            }
+            
         }
 
         /// <summary>
@@ -668,7 +723,7 @@ namespace Nop.Plugin.Payments.Worldline
                 ["Plugins.Payments.Worldline.Fields.EnableAbortResponse"] = "Enable Abort Response",
                 ["Plugins.Payments.Worldline.Fields.PaymentMode"] = "Payment Mode",
                 ["Plugins.Payments.Worldline.Fields.PaymentModeOrder"] = "Payment Mode Order",
-                ["Plugins.Payments.Worldline.Fields.PaymentModeOrder.Hint"] = "If Bank selection is at Worldline ePayments India Pvt.Ltd. (a Worldline brand) end then select all, if bank selection at Merchant end then pass appropriate mode respective to selected option",
+                ["Plugins.Payments.Worldline.Fields.PaymentModeOrder.Hint"] = "Sequence in which he Payment Modes will be displayed on Worldline payments page.",
                 ["Plugins.Payments.Worldline.Fields.Frequency"] = "Frequency",
                 ["Plugins.Payments.Worldline.Fields.EnableInstrumentDeRegistration"] = "Enable Instrument De Registration",
                 ["Plugins.Payments.Worldline.Fields.EnableInstrumentDeRegistration.Hint"] = "If this feature is enabled, you will have an option to delete saved cards",
@@ -753,18 +808,24 @@ namespace Nop.Plugin.Payments.Worldline
             return await _localizationService.GetResourceAsync("Plugins.Payments.Worldline.PaymentMethodDescription");
         }
 
-        public string GenerateRandomString()
+        //public string GenerateRandomString()
+        //{
+        //    //var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
+        //    //var random = temp.Substring(0, 15);
+        //    //string shortDate = DateTime.Now.ToShortDateString().Replace("/", string.Empty).Replace("-", string.Empty);
+        //    //return random.ToString() + shortDate;
+        //    var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
+        //    var barcode = Regex.Replace(temp, "[a-zA-Z]", string.Empty).Substring(0, 10);
+
+        //    return barcode.ToString();
+        //}
+        public static string GenerateRandomString(int size)
         {
-            //var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
-            //var random = temp.Substring(0, 15);
-            //string shortDate = DateTime.Now.ToShortDateString().Replace("/", string.Empty).Replace("-", string.Empty);
-            //return random.ToString() + shortDate;
-            var temp = Guid.NewGuid().ToString().Replace("-", string.Empty);
-            var barcode = Regex.Replace(temp, "[a-zA-Z]", string.Empty).Substring(0, 10);
-
-            return barcode.ToString();
+            Random random = new Random();
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            return new string(Enumerable.Repeat(chars, size)
+              .Select(s => s[random.Next(s.Length)]).ToArray());
         }
-
         public string GenerateSHA512String(string inputString)
         {
             using (SHA512 sha512Hash = SHA512.Create())
@@ -783,12 +844,12 @@ namespace Nop.Plugin.Payments.Worldline
         /// <summary>
         /// Gets a value indicating whether capture is supported
         /// </summary>
-        public bool SupportCapture => true;
+        public bool SupportCapture => false;
 
         /// <summary>
         /// Gets a value indicating whether partial refund is supported
         /// </summary>
-        public bool SupportPartiallyRefund => true;
+        public bool SupportPartiallyRefund => false;
 
         /// <summary>
         /// Gets a value indicating whether refund is supported

@@ -1,5 +1,6 @@
 ﻿using Nop.Web.Framework.Mvc.ModelBinding;
 using Nop.Web.Framework.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace Nop.Plugin.Payments.Worldline.Models
 {
@@ -65,6 +66,7 @@ namespace Nop.Plugin.Payments.Worldline.Models
         public string PaymentMode { get; set; }
         public bool PaymentMode_OverrideForStore { get; set; }
         [NopResourceDisplayName("Plugins.Payments.Worldline.Fields.paymentModeOrder")]
+        [Required]
         public string PaymentModeOrder { get; set; }
         public bool PaymentModeOrder_OverrideForStore { get; set; }
         [NopResourceDisplayName("Plugins.Payments.Worldline.Fields.enableInstrumentDeRegistration")]

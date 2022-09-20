@@ -60,7 +60,7 @@
                         <nop-label asp-for="Currency" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="Currency" asp-items="@ViewBag.currencyCodes " />
+                        <nop-select asp-for="Currency" asp-items="@ViewBag.currencyCodes" />
                         <span asp-validation-for="Currency"></span>
                     </div>
                 </div>
@@ -71,7 +71,7 @@
                         <nop-label asp-for="TypeOfPayment" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="TypeOfPayment" asp-items="@ViewBag.typeOfPayment " />
+                        <nop-select asp-for="TypeOfPayment" asp-items="@ViewBag.typeOfPayments" />
                         <span asp-validation-for="TypeOfPayment"></span>
                     </div>
                 </div>
@@ -225,7 +225,7 @@
                     </div>
                     <div class="col-md-9">
                         <nop-textarea asp-for="PaymentModeOrder" />
-                        <span>Please pass order in this format: cards,netBanking,imps,wallets,cashCards,UPI,MVISA,debitPin,NEFTRTGS,emiBanks. Merchant can define their payment mode order</span>
+                        <span>Merchant can remove unwanted Payment Methods from above payment modes. Merchant can change their payment mode order (sequence)</span>
                         <span asp-validation-for="PaymentModeOrder"></span>
                     </div>
                 </div>

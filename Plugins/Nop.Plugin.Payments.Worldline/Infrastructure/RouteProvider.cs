@@ -18,8 +18,8 @@ namespace Nop.Plugin.Payments.Worldline.Infrastructure
             endpointRouteBuilder.MapControllerRoute("Plugin.Payments.Worldline.PaymentCheckout", "Plugins/Worldline/PaymentCheckout",
                 new { controller = "Worldline", action = "PaymentCheckout" });
 
-            endpointRouteBuilder.MapControllerRoute("Plugin.Payments.Worldline.Refund", "Plugins/Worldline/Refund",
-                 new { controller = "Worldline", action = "Refund" });
+            endpointRouteBuilder.MapControllerRoute("Plugin.Payments.Worldline.Refund", "Admin/Worldline/Refund",
+                 new { area= "Admin", controller = "Worldline", action = "Refund" });
             //PDT
             endpointRouteBuilder.MapControllerRoute("Plugin.Payments.Worldline.PDTHandler", "Plugins/Worldline/PDTHandler",
                  new { controller = "Worldline", action = "PDTHandler" });

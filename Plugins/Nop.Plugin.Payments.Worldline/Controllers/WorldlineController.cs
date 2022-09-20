@@ -194,6 +194,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
 
         public async Task<ActionResult> PaymentCheckoutAsync(string token, string orderid, string amount, string mid)
         {
+            const string strPaymentModeOrder = "cards,netBanking,imps,wallets,cashCards,UPI,MVISA,debitPin,NEFTRTGS,emiBanks";
             var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
             var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
             var primaryColor = await _settingService.GetSettingAsync("worldlinepaymentsettings.primaryColor");
@@ -216,7 +217,6 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             var enableSI = await _settingService.GetSettingAsync("worldlinepaymentsettings.enableSI");
             var embedPaymentGatewayOnPage = await _settingService.GetSettingAsync("worldlinepaymentsettings.embedPaymentGatewayOnPage");
             var separateCardMode = await _settingService.GetSettingAsync("worldlinepaymentsettings.separateCardMode");
-
             PaymentViewModel payment = new PaymentViewModel
             {
                 Amount = Request.Cookies["amount"],
@@ -231,7 +231,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 MerchantSchemeCode = merchantSchemeCode.Value,
                 SALT = SALT.Value,
                 PaymentMode = paymentMode.Value,
-                PaymentModeOrder = paymentModeOrder.Value,
+                PaymentModeOrder = String.IsNullOrEmpty(paymentModeOrder.Value)? strPaymentModeOrder : paymentModeOrder.Value,
                 PaymentMerchantLogoUrl = paymentMerchantLogoUrl.Value,
                 MerchantMsg = merchantMessage.Value,
                 DisclaimerMsg = disclaimerMessage.Value,
@@ -348,10 +348,10 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         [HttpPost]
         public async Task<ActionResult> ResponseHandler(IFormCollection formCollection)
         {
+            int orderId = Convert.ToInt32(Request.Cookies["orderid"]);
+            Order order = _orderRepository.Table.Where(a => a.Id == orderId).ToList().FirstOrDefault();
             try
             {
-                int orderId = Convert.ToInt32(Request.Cookies["orderid"]);
-                Order order = _orderRepository.Table.Where(a => a.Id == orderId).ToList().FirstOrDefault();
                 var merchantcode = _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
                 var currency = _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
                 var data = formCollection["msg"].ToString().Split('|');
@@ -399,9 +399,18 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     var paymentData = JObject.Parse(dualVerificationTokens[6].ToString()).Children();
                     List<JToken> paymentTokens = paymentData.Children().ToList();
 
+                    if (paymentTokens[7]["statusCode"].ToString() != SUCCESS_CODE)
+                        return RedirectToRoute("OrderDetails", new { orderId = order.Id });
+                    if (!_orderProcessingService.CanMarkOrderAsPaid(order))
+                        return RedirectToRoute("OrderDetails", new { orderId = order.Id });
+
                     order.AuthorizationTransactionResult = paymentTokens[7]["statusMessage"].ToString();
-                    order.PaymentStatusId = (paymentTokens[7]["statusCode"].ToString() == SUCCESS_CODE) ? (int)PaymentStatus.Paid : (int)PaymentStatus.Pending;
-                    order.OrderStatusId = (paymentTokens[7]["statusCode"].ToString() == SUCCESS_CODE) ? (int)OrderStatus.Processing : (int)OrderStatus.Pending;
+                    order.AuthorizationTransactionCode = paymentTokens[7]["identifier"].ToString();
+                    order.CaptureTransactionResult = formCollection["msg"].ToString();
+                    order.AuthorizationTransactionId = dualVerificationTokens[1].ToString();
+                    order.CaptureTransactionId = paymentTokens[7]["bankReferenceIdentifier"].ToString();
+                    await _orderService.UpdateOrderAsync(order);
+                    await _orderProcessingService.MarkOrderAsPaidAsync(order);
                     notification = "Order Placed successfully!";
                 }
                 else if (data[0] == FAILURE_CODE || data[0] == ABORTED_CODE)
@@ -409,6 +418,10 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     order.AuthorizationTransactionResult = data[1];
                     order.PaymentStatusId = (int)PaymentStatus.Pending;
                     order.OrderStatusId = (int)OrderStatus.Cancelled;
+                    order.AuthorizationTransactionId = data[3].ToString();
+                    order.AuthorizationTransactionCode = data[5].ToString();
+                    order.CaptureTransactionResult = formCollection["msg"].ToString();
+                    await _orderService.UpdateOrderAsync(order);
                     notification = data[1].ToUpperInvariant() + ":" + data[2];
                 }
                 else
@@ -416,18 +429,19 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                     order.AuthorizationTransactionResult = data[1];
                     order.PaymentStatusId = (int)PaymentStatus.Pending;
                     order.OrderStatusId = (int)OrderStatus.Pending;
+                    order.AuthorizationTransactionId = data[3].ToString();
+                    order.AuthorizationTransactionCode = data[5].ToString();
+                    order.CaptureTransactionResult = formCollection["msg"].ToString();
+                    await _orderService.UpdateOrderAsync(order);
                     notification = data[1].ToUpperInvariant() + ":" + data[2];
                 }
-                await _orderService.UpdateOrderAsync(order);
                 _notificationService.SuccessNotification(notification);
-                
             }
             catch (Exception ex)
             {
-
                 //throw;
             }
-            return RedirectToAction("Index", "Home");
+            return RedirectToRoute("OrderDetails", new { orderId = order.Id });
         }
 
         [AuthorizeAdmin]
@@ -436,12 +450,10 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
         {
             if (!await _permissionService.AuthorizeAsync(StandardPermissionProvider.ManagePaymentMethods))
                 return AccessDeniedView();
-
+            const string strPaymentModeOrder = "cards,netBanking,imps,wallets,cashCards,UPI,MVISA,debitPin,NEFTRTGS,emiBanks";
             //load settings for a chosen store scope
             var storeScope = await _storeContext.GetActiveStoreScopeConfigurationAsync();
             var worldlinePaymentSettings = await _settingService.LoadSettingAsync<WorldlinePaymentSettings>(storeScope);
-
-
             var model = new ConfigurationModel
             {
                 Utf8 = worldlinePaymentSettings.Utf8,
@@ -462,7 +474,7 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 MerchantMessage = worldlinePaymentSettings.merchantMessage,
                 DisclaimerMessage = worldlinePaymentSettings.disclaimerMessage,
                 PaymentMode = worldlinePaymentSettings.paymentMode,
-                PaymentModeOrder = worldlinePaymentSettings.paymentModeOrder,
+                PaymentModeOrder = String.IsNullOrEmpty(worldlinePaymentSettings.paymentModeOrder)? strPaymentModeOrder : worldlinePaymentSettings.paymentModeOrder,
                 EnableInstrumentDeRegistration = worldlinePaymentSettings.enableInstrumentDeRegistration,
                 TransactionType = worldlinePaymentSettings.transactionType,
                 HideSavedInstruments = worldlinePaymentSettings.hideSavedInstruments,
@@ -509,62 +521,47 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
 
             List<SelectListItem> paymentMode = new List<SelectListItem>()
             {
-        new SelectListItem() {Text="all", Value="all"},
-        new SelectListItem() { Text="cards", Value="cards"},
-         new SelectListItem() {Text="netBanking", Value="netBanking"},
-        new SelectListItem() { Text="UPI", Value="UPI"},
-         new SelectListItem() {Text="imps", Value="imps"},
-        new SelectListItem() { Text="wallets", Value="wallets"},
-         new SelectListItem() {Text="cashCards", Value="cashCards"},
-        new SelectListItem() { Text="NEFTRTGS", Value="NEFTRTGS"},
-          new SelectListItem() { Text="emiBanks", Value="emiBanks"}
+                new SelectListItem() {Text="all", Value="all"}
             };
 
-            List<SelectListItem> typeOfPayment = new List<SelectListItem>()
+            List<SelectListItem> typeOfPayments = new List<SelectListItem>()
             {
-        new SelectListItem() {Text="TEST", Value="TEST"},
-        new SelectListItem() { Text="LIVE", Value="LIVE"}
-
+                new SelectListItem() {Text="TEST", Value="TEST"},
+                new SelectListItem() { Text="LIVE", Value="LIVE"}
             };
             List<SelectListItem> amounttype = new List<SelectListItem>()
             {
-        new SelectListItem() { Text="Variable", Value="Variable"},
-        new SelectListItem() {Text="Fixed", Value="Fixed"}
+                new SelectListItem() { Text="Variable", Value="Variable"},
+                new SelectListItem() {Text="Fixed", Value="Fixed"}
             };
             List<SelectListItem> frequency = new List<SelectListItem>()
             {
-        new SelectListItem() {Text="As and when presented", Value="ADHO"},
-        new SelectListItem() {Text="Daily", Value="DAIL"},
-        new SelectListItem() {Text="Weekly", Value="WEEK"},
-        new SelectListItem() {Text="Monthly", Value="MNTH"},
-        new SelectListItem() {Text="Quarterly", Value="QURT"},
-        new SelectListItem() {Text="Semi annually", Value="MIAN"},
-        new SelectListItem() {Text="Yearly", Value="YEAR"},
-        new SelectListItem() {Text="Bi- monthly", Value="BIMN"}
+                new SelectListItem() {Text="As and when presented", Value="ADHO"},
+                new SelectListItem() {Text="Daily", Value="DAIL"},
+                new SelectListItem() {Text="Weekly", Value="WEEK"},
+                new SelectListItem() {Text="Monthly", Value="MNTH"},
+                new SelectListItem() {Text="Quarterly", Value="QURT"},
+                new SelectListItem() {Text="Semi annually", Value="MIAN"},
+                new SelectListItem() {Text="Yearly", Value="YEAR"},
+                new SelectListItem() {Text="Bi- monthly", Value="BIMN"}
             };
             List<SelectListItem> transactionTypes = new List<SelectListItem>()
             {
-        new SelectListItem() { Text="SALE", Value="SALE"}
-
+                new SelectListItem() { Text="SALE", Value="SALE"}
             };
 
             ViewBag.enbDisb = enbDisb;
             ViewBag.currencyCodes = currencyCodes;
             ViewBag.paymentModes = paymentMode;
-            ViewBag.typeOfPayment = typeOfPayment;
+            ViewBag.typeOfPayments = typeOfPayments;
             ViewBag.amounttype = amounttype;
             ViewBag.frequency = frequency;
             ViewBag.transactionTypes = transactionTypes;
-
-
-
             if (storeScope <= 0)
-
                 return View("~/Plugins/Payments.Worldline/Views/Configure.cshtml", model);
 
             model.Utf8_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.Utf8, storeScope);
             model.Authenticity_token_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.authenticity_token, storeScope);
-
             model.MerchantCode_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantCode, storeScope);
             model.MerchantSchemeCode_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantSchemeCode, storeScope);
             model.SALT_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.SALT, storeScope);
@@ -600,21 +597,17 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             model.SiDetailsAtMerchantEnd_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.siDetailsAtMerchantEnd, storeScope);
             model.AmountType_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.amounttype, storeScope);
             model.Frequency_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.frequency, storeScope);
-
-            //  model.merchantLogoUrl_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantLogoUrl, storeScope);
-            // model.merchantMsg_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantMsg, storeScope);
-            //model.disclaimerMsg_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.disclaimerMsg, storeScope);
             model.ShowPGResponseMsg_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.showPGResponseMsg, storeScope);
             model.EnableAbortResponse_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.enableAbortResponse, storeScope);
-
-
+            //model.merchantLogoUrl_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantLogoUrl, storeScope);
+            //model.merchantMsg_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.merchantMsg, storeScope);
+            //model.disclaimerMsg_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.disclaimerMsg, storeScope);
             //model.UseSandbox_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.UseSandbox, storeScope);
             //model.BusinessEmail_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.BusinessEmail, storeScope);
             //model.PdtToken_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.PdtToken, storeScope);
             //model.PassProductNamesAndTotals_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.PassProductNamesAndTotals, storeScope);
             //model.AdditionalFee_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.AdditionalFee, storeScope);
             //model.AdditionalFeePercentage_OverrideForStore = await _settingService.SettingExistsAsync(worldlinePaymentSettings, x => x.AdditionalFeePercentage, storeScope);
-
             return View("~/Plugins/Payments.Worldline/Views/Configure.cshtml", model);
         }
 
@@ -818,12 +811,6 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
                 ViewBag.merchantcode = merchantcode.Value;
                 ViewBag.currency = currency.Value;
-                //using (StreamReader r = new StreamReader(path + "\\output.json"))
-                //{
-                //    json = r.ReadToEnd();
-                //    r.Close();
-                //}
-                // JObject config_data = JObject.Parse(json);
                 OrderSearchModel searchModel = new OrderSearchModel();
                 searchModel.StoreId = 0;
                 //var transaction_ids = getAuthorizationTransactionId(searchModel);
@@ -884,20 +871,14 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                         {
                             if (order.PaymentStatusId != (int)PaymentStatus.Paid)
                             {
-                                string amount = tokens[6]["paymentTransaction"]["amount"].ToString();
-                                order.AuthorizationTransactionResult = tokens[6]["paymentTransaction"]["statusMessage"].ToString();
-                                order.PaymentStatusId = (int)PaymentStatus.Paid;
-                                order.OrderStatusId = (int)OrderStatus.Processing;
-                                await _orderService.UpdateOrderAsync(order);
-                                lstUpdatedOrders.Add(order.Id);
-                                var orderNote = new OrderNote
+                                if (_orderProcessingService.CanMarkOrderAsPaid(order))
                                 {
-                                    OrderId = order.Id,
-                                    DisplayToCustomer = false,
-                                    Note = "Order has been marked as Paid.Amount = " + amount + "",
-                                    CreatedOnUtc = DateTime.UtcNow
-                                };
-                                await _orderService.InsertOrderNoteAsync(orderNote);
+                                    order.AuthorizationTransactionResult = tokens[6]["paymentTransaction"]["statusMessage"].ToString();
+                                    order.AuthorizationTransactionCode = tokens[6]["paymentTransaction"]["identifier"].ToString();
+                                    await _orderService.UpdateOrderAsync(order);
+                                    await _orderProcessingService.MarkOrderAsPaidAsync(order);
+                                    lstUpdatedOrders.Add(order.Id);
+                                }
                                 await _customerActivityService.InsertActivityAsync("EditOrder",
                                 string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
                             }
@@ -1066,7 +1047,6 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
             try
             {
                 string path = _env.WebRootPath;
-                //string json = "";
                 var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
                 var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
                 ViewBag.merchantcode = merchantcode.Value.ToString();
@@ -1081,7 +1061,6 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                         currency = currency.Value,
                         identifier = fc["merchantRefNo"].ToString(),
                         dateTime = start_date.ToString("dd-M-yyyy"),
-                        //string.Format("{0:d/M/yyyy}", day.ToString()),
                         requestType = "O"
                     }
                 };
@@ -1213,106 +1192,6 @@ namespace Nop.Plugin.Payments.Worldline.Controllers
                 //throw ex;
             }
             return View("~/Plugins/Payments.Worldline/Views/s2s.cshtml");
-        }
-
-        [AuthorizeAdmin]
-        [Area(AreaNames.Admin)]
-        public async Task<ActionResult> RefundAsync()
-        {
-            try
-            {
-                string path = _env.WebRootPath;
-                string tranId = GenerateRandomString(12);
-                ViewBag.tranId = tranId;
-                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
-                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
-                ViewBag.merchantcode = merchantcode.Value;
-                ViewBag.currency = currency.Value;
-            }
-            catch (Exception ex)
-            {
-
-                //       throw;
-            }
-            return View("/Plugins/Payments.Worldline/Views/Refund.cshtml");
-            // return View();
-        }
-
-        [AuthorizeAdmin]
-        [Area(AreaNames.Admin)]
-        [HttpPost]
-        public async Task<ActionResult> RefundAsync(IFormCollection fc)
-        {
-            try
-            {
-                string path = _env.WebRootPath;
-                string json = string.Empty;
-                var merchantcode = await _settingService.GetSettingAsync("worldlinepaymentsettings.merchantcode");
-                var currency = await _settingService.GetSettingAsync("worldlinepaymentsettings.currency");
-                ViewBag.merchantcode = merchantcode.Value;
-                ViewBag.currency = currency.Value;
-                //using (StreamReader r = new StreamReader(path + "\\output.json"))
-                //{
-                //    json = r.ReadToEnd();
-                //    r.Close();
-                //}
-                //JObject config_data = JObject.Parse(json);
-                DateTime start_date = DateTime.Parse(fc["inputDate"].ToString());
-                var data = new
-                {
-                    merchant = new { identifier = merchantcode.Value },
-                    cart = new
-                    {
-                    },
-                    transaction = new
-                    {
-                        deviceIdentifier = "S",
-                        amount = fc["amount"].ToString(),
-                        currency = currency.Value,
-                        dateTime = start_date.ToString("dd-MM-yyyy"),
-                        token = fc["token"].ToString(),
-                        //string.Format("{0:d/M/yyyy}", day.ToString()),
-                        requestType = "R"
-                    }
-                };
-                HttpContent content = new StringContent(JsonConvert.SerializeObject(data));
-                HttpClient client = new HttpClient();
-                client.BaseAddress = new Uri("https://www.paynimo.com/api/paynimoV2.req");
-                client.DefaultRequestHeaders.Accept.Clear();
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                var response = await client.PostAsync("https://www.paynimo.com/api/paynimoV2.req", content);
-                var respStr = response.Content.ReadAsStringAsync();
-                //data = null;
-                JObject dual_verification_result = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(respStr));
-                var jsonData = JObject.Parse(dual_verification_result["Result"].ToString()).Children();
-                List<JToken> tokens = jsonData.Children().ToList();
-                string statusCode = tokens[6]["paymentTransaction"]["statusCode"].ToString();
-                string amount = tokens[6]["paymentTransaction"]["amount"].ToString();
-
-                if (statusCode == "0499") //Change the code as per requirement
-                {
-                    Order order = _orderRepository.Table.Where(a => a.AuthorizationTransactionId == fc["token"].ToString()).ToList().FirstOrDefault();
-                    order.PaymentStatusId = (int)PaymentStatus.Refunded;
-                    await _orderService.UpdateOrderAsync(order);
-                    OrderNote objOrderNote = new OrderNote
-                    {
-                        Note = "Order has been marked as refunded. Amount = " + amount + "",
-                        DisplayToCustomer = false,
-                        CreatedOnUtc = DateTime.UtcNow,
-                        OrderId = order.Id
-                    };
-                    await _orderService.InsertOrderNoteAsync(objOrderNote);
-                    //_orderService.UpdateOrder(order);
-                    await _customerActivityService.InsertActivityAsync("EditOrder",
-                    string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
-                }
-                ViewBag.Tokens = tokens;
-            }
-            catch (Exception ex)
-            {
-                //   throw;
-            }
-            return View("/Plugins/Payments.Worldline/Views/Refund.cshtml");
         }
 
         public static string GenerateRandomString(int size)
